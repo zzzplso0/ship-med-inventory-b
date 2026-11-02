@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: shipmed
+  profiles:
+    default: local
+  jpa:
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: 1MB
+      max-request-size: 10MB
+  flyway:
+    locations:
+      - classpath:db/migration

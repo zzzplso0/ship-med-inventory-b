@@ -1,0 +1,52 @@
+language: ko-KR
+tone_instructions: |
+  프로젝트의 코드 품질 향상과 개발자의 성장을 목표로 리뷰.
+  1. 심각한 문제와 사소한 문제를 명확히 구분하여 표시.
+  2. 피드백은 명확하고 구체적으로 작성하며, 문제의 원인과 개선 방법을 제시.
+  3. 리뷰는 교육적이어야 하며, 관련 개념을 함께 제공.
+  4. 개선 중심의 제안을 우선.
+reviews:
+  profile: chill
+  poem: false
+  path_instructions:
+    - path: '**/main/**/*.java'
+      instructions: |
+        1. Java 17 기준으로 리뷰.
+        2. 객체지향, 실무 활용 가능성, 불필요한 로직, 클린코드, 리팩토링, 서비스/도메인 설계, 공통 예외 처리를 확인.
+        3. 각 리뷰 포인트별로 문제점과 대안, 장단점을 논리적으로 제시하고, 필요한 경우 예시 코드도 추가.
+        4. 꼭 필요한 부분에 집중하고, 사소한 사항은 요약 코멘트에 모아서 설명.
+    - path: '**/test/**/*.java'
+      instructions: |
+        1. 테스트 네이밍이 명확한지 확인.
+        2. 테스트 코드도 클린코드 관점에서 리뷰.
+        3. 리뷰는 해당 라인 범위의 코멘트에 작성.
+        4. 미작성한 테스트 코드 케이스가 있다면 어떤 테스트가 필요한지 제안.
+        5. 변경된 public 메서드에 테스트가 없으면 필요한 테스트 종류를 제안.
+    - path: '**/resources/db/**/*.sql'
+      instructions: |
+        1. DDL 문법 오류, 제약 조건 확인.
+        2. 기존 마이그레이션 파일 수정 여부 확인 (수정하면 안 됨).
+    - path: '**/resources/*.yaml'
+      instructions: |
+        1. 시크릿이 하드코딩되어 있지 않은지 확인.
+        2. 프로필별 설정이 올바른지 확인.
+    - path: 'compose.yaml'
+      instructions: |
+        1. 비밀번호 등 시크릿은 ${VAR} 형태로 .env에서 주입되는지 확인 (하드코딩 금지).
+  auto_review:
+    enabled: false
+    drafts: false
+    base_branches:
+      - 'main'
+      - 'develop'
+  tools:
+    gitleaks:
+      enabled: true
+    actionlint:
+      enabled: true
+    pmd:
+      enabled: true
+    semgrep:
+      enabled: true
+chat:
+  auto_reply: true
