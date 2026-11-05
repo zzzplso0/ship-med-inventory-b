@@ -169,11 +169,11 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 | POST   | `/medications`                                | 약품 등록              | 관리자   | 201                                     |
 | GET    | `/medications`                                | 약품 목록              | 로그인   | 200                                     |
 | PUT    | `/ships/{shipId}/requirements/{medicationId}` | 비치 기준 설정(upsert) | 관리자   | 200 수정 / 201 신규                     |
-| GET    | `/ships/{shipId}/requirements`                | 비치 기준 목록         | 로그인   | 200                                     |
+| GET    | `/ships/{shipId}/requirements`                | 비치 기준 목록         | 관리자, 의무사관(소속 선박) | 200                                     |
 | POST   | `/ships/{shipId}/lots`                        | 재고 입고              | 의무사관 | 201 / 400 만료·수량·입고시각 / 409 중복 로트 |
 | POST   | `/ships/{shipId}/usages`                      | 약품 사용 (FEFO 차감)  | 의무사관 | 201 / 409 재고부족·키 재사용 / 200 멱등 |
 | POST   | `/usages/{usageId}/cancellation`              | 사용 취소 (로트 복원)  | 의무사관 | 200 / 200 멱등                          |
-| GET    | `/ships/{shipId}/inventory`                   | 재고 현황(부족·임박)   | 로그인   | 200                                     |
+| GET    | `/ships/{shipId}/inventory`                   | 재고 현황(부족·임박)   | 관리자, 의무사관(소속 선박) | 200                                     |
 
 ---
 
