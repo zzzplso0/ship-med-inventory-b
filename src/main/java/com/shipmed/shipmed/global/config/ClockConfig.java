@@ -1,15 +1,15 @@
-package com.shipmed.shipmed.config;
-
-import java.time.Clock;
+package com.shipmed.shipmed.global.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Clock;
+
 @Configuration(proxyBeanMethods = false)
 public class ClockConfig {
 
-	@Bean
-	public Clock clock() {
-		return Clock.systemUTC();
-	}
+    @Bean
+    public Clock clock() {
+        return Clock.systemUTC();
+    }
 }
