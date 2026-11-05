@@ -131,6 +131,8 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 ### 4. 초기 데이터
 
 - 첫 관리자: 모든 환경에서 서버 시작 시 `CommandLineRunner`가 만듦.
+    - `ADMIN` 역할의 계정이 이미 있으면 만들지 않음. 설정값을 바꿔도 기존 관리자에는 반영되지 않음.
+    - 계정 정보는 `shipmed.initial-admin`(`login-id`, `name`, `password`)으로 프로파일별 설정. prod는 환경변수 `ADMIN_LOGIN_ID`, `ADMIN_NAME`, `ADMIN_PASSWORD`로만 받고, 값이 없으면 서버가 시작되지 않음. local, test는 각 프로파일 yaml의 전용 값을 씀.
 - 로컬 프로파일 전용: 선박 100척, 테스트용 의무사관 계정. 스키마 마이그레이션과 경로를 분리해 prod에는 적용되지 않게 함.
 
 ---
@@ -142,7 +144,11 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 ### 1. 로그인
 
 - 세션 기반 로그인. 로그인에 성공하면 세션 쿠키를 발급하고, 이후 요청의 사용자는 세션에서 꺼냄.
-- 비밀번호는 해시로 저장.
+- 로그인, 로그아웃은 Security 필터가 아니라 컨트롤러에서 처리.
+    - 로그인: `AuthenticationManager`로 인증하고, 기존 세션이 있으면 ID를 교체(세션 고정 방지)한 뒤 `SecurityContext`를 세션에 저장. 인증 실패는 `LOGIN_FAILED`로 변환.
+    - 로그아웃: 기본 `LogoutFilter`를 끄고 컨트롤러에서 세션을 무효화.
+- 세션의 principal(`CustomUserDetails`)에는 엔티티 대신 `userId`, `loginId`, `role`, `shipId` 값만 담음.
+- 비밀번호는 해시로 저장. 인증이 끝나면 principal의 해시를 지워 세션에 남기지 않음.
 - CSRF: MVP는 화면 없이 API만 제공하므로 CSRF 보호를 끄고, 세션 쿠키는 `HttpOnly`, `SameSite=Lax`로 발급. 화면(Thymeleaf) 단계에서 CSRF 보호를 켬.
 
 ### 2. 권한 판정 순서
@@ -164,22 +170,22 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 - 사용자는 세션으로 식별. `Idempotency-Key` 헤더는 사용 기록에만 보냄.
 - 상태 코드는 조회, 멱등 재요청 200, 생성 201, 입력 오류 400, 미로그인 401, 권한 없음 403, 없음 404, 비즈니스 충돌 409.
 
-| 메서드 | 경로                                          | 기능                   | 권한     | 주요 응답                               |
-|--------|-----------------------------------------------|------------------------|----------|-----------------------------------------|
-| POST   | `/auth/login`                                 | 로그인                 | 누구나   | 200 / 401                               |
-| POST   | `/auth/logout`                                | 로그아웃               | 로그인   | 200                                     |
-| POST   | `/users`                                      | 계정 등록              | 관리자   | 201                                     |
-| GET    | `/users`                                      | 계정 목록              | 관리자   | 200                                     |
-| POST   | `/ships`                                      | 선박 등록              | 관리자   | 201                                     |
-| GET    | `/ships`                                      | 선박 목록              | 로그인   | 200                                     |
-| POST   | `/medications`                                | 약품 등록              | 관리자   | 201                                     |
-| GET    | `/medications`                                | 약품 목록              | 로그인   | 200                                     |
-| PUT    | `/ships/{shipId}/requirements/{medicationId}` | 비치 기준 설정(upsert) | 관리자   | 200 수정 / 201 신규                     |
-| GET    | `/ships/{shipId}/requirements`                | 비치 기준 목록         | 관리자, 의무사관(소속 선박) | 200                                     |
-| POST   | `/ships/{shipId}/lots`                        | 재고 입고              | 의무사관 | 201 / 400 만료·수량·입고시각 / 409 중복 로트 |
-| POST   | `/ships/{shipId}/usages`                      | 약품 사용 (FEFO 차감)  | 의무사관 | 201 / 409 재고부족·키 재사용 / 200 멱등 |
-| POST   | `/usages/{usageId}/cancellation`              | 사용 취소 (로트 복원)  | 의무사관 | 200 / 200 멱등                          |
-| GET    | `/ships/{shipId}/inventory`                   | 재고 현황(부족·임박)   | 관리자, 의무사관(소속 선박) | 200                                     |
+| 메서드 | 경로                                          | 기능                   | 권한                        | 주요 응답                                    |
+|--------|-----------------------------------------------|------------------------|-----------------------------|----------------------------------------------|
+| POST   | `/auth/login`                                 | 로그인                 | 누구나                      | 200 / 400 / 401                              |
+| POST   | `/auth/logout`                                | 로그아웃               | 로그인                      | 200 / 401                                    |
+| POST   | `/users`                                      | 계정 등록              | 관리자                      | 201                                          |
+| GET    | `/users`                                      | 계정 목록              | 관리자                      | 200                                          |
+| POST   | `/ships`                                      | 선박 등록              | 관리자                      | 201                                          |
+| GET    | `/ships`                                      | 선박 목록              | 로그인                      | 200                                          |
+| POST   | `/medications`                                | 약품 등록              | 관리자                      | 201                                          |
+| GET    | `/medications`                                | 약품 목록              | 로그인                      | 200                                          |
+| PUT    | `/ships/{shipId}/requirements/{medicationId}` | 비치 기준 설정(upsert) | 관리자                      | 200 수정 / 201 신규                          |
+| GET    | `/ships/{shipId}/requirements`                | 비치 기준 목록         | 관리자, 의무사관(소속 선박) | 200                                          |
+| POST   | `/ships/{shipId}/lots`                        | 재고 입고              | 의무사관                    | 201 / 400 만료·수량·입고시각 / 409 중복 로트 |
+| POST   | `/ships/{shipId}/usages`                      | 약품 사용 (FEFO 차감)  | 의무사관                    | 201 / 409 재고부족·키 재사용 / 200 멱등      |
+| POST   | `/usages/{usageId}/cancellation`              | 사용 취소 (로트 복원)  | 의무사관                    | 200 / 200 멱등                               |
+| GET    | `/ships/{shipId}/inventory`                   | 재고 현황(부족·임박)   | 관리자, 의무사관(소속 선박) | 200                                          |
 
 ---
 
@@ -237,14 +243,17 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 	{ loginId, password }
 200:
 	{ userId, loginId, role, shipId }  + 세션 쿠키
+400:
+	필수값 누락
 401:
-	로그인 ID 또는 비밀번호 불일치
+	{ error:LOGIN_FAILED } // 로그인 ID 또는 비밀번호 불일치. 없는 계정도 같은 응답
 ```
 
 - POST `/auth/logout` — 로그아웃
 
 ```markdown
 200: 세션 무효화
+401: { error:UNAUTHORIZED } // 로그인 안 함
 ```
 
 - POST `/users` — 계정 등록 (관리자)
@@ -369,13 +378,15 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 |------|-----------------------------------------------------------------|----------------------------------------------------------------|
 | 400  | `INVALID_INPUT`                                                 | 검증 실패, 잘못된 JSON·타입, 필수 파라미터 누락                |
 | 400  | `EXPIRED_ON_ARRIVAL`, `RECEIVED_AT_IN_FUTURE`                   | 입고 규칙 위반                                                 |
+| 401  | `UNAUTHORIZED`                                                  | 로그인하지 않은 요청                                           |
+| 401  | `LOGIN_FAILED`                                                  | 로그인 ID 또는 비밀번호 불일치                                 |
 | 404  | `RESOURCE_NOT_FOUND`                                            | 없는 경로. 없는 대상은 도메인별 코드(`SHIP_NOT_FOUND` 등) 사용 |
 | 405  | `METHOD_NOT_ALLOWED`                                            | 지원하지 않는 HTTP 메서드                                      |
 | 409  | `DUPLICATE_LOT`, `INSUFFICIENT_STOCK`, `IDEMPOTENCY_KEY_REUSED` | 비즈니스 충돌                                                  |
 | 500  | `INTERNAL_SERVER_ERROR`                                         | 처리되지 않은 예외                                             |
 
 - 그 밖의 4xx(415 등)는 상태 코드를 유지하고 `error`는 `INVALID_INPUT`으로 응답한다.
-- 처리 위치는 `GlobalExceptionHandler`(`@RestControllerAdvice`)다. 컨트롤러 밖의 보안 필터에서 거부된 401·403은 여기를 거치지 않으며, 응답 형식은 인증 단계에서 정한다.
+- 처리 위치는 `GlobalExceptionHandler`(`@RestControllerAdvice`)다. 보안 필터에서 거부된 요청은 여기를 거치지 않으므로, 미로그인 401은 `CustomAuthenticationEntryPoint`가 같은 형식으로 직접 응답한다. 403의 응답은 권한 판정을 구현할 때 같은 형식으로 맞춘다.
 
 ---
 
