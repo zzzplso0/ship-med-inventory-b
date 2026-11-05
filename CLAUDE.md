@@ -32,7 +32,7 @@
 - 패키지 루트: `com.shipmed.shipmed`
 - 스키마: `src/main/resources/db/migration` (Flyway). 스키마 변경은 엔티티가 아니라 마이그레이션으로 한다.
 - 로컬 전용 초기 데이터(선박 100척, 테스트 의무사관): `src/main/resources/db/seed`. `application-local.yaml`에서만 Flyway 경로에 포함되어 prod에는 적용되지 않음.
-- 프로파일: `local`(기본), `prod`(DB 접속 정보는 환경변수 `DB_URL`, `DB_USER`, `DB_PASSWORD`), `test`
+- 프로파일: `local`(기본), `prod`(환경변수 필수. DB 접속 정보 `DB_URL`, `DB_USER`, `DB_PASSWORD`, 첫 관리자 `ADMIN_LOGIN_ID`, `ADMIN_NAME`, `ADMIN_PASSWORD`), `test`
 - JDBC 타임존은 UTC. 만료·임박 판정도 UTC 기준(decisions 부차 3번).
 
 ## 구현 시 지킬 것

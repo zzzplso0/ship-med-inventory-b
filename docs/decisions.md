@@ -187,6 +187,12 @@
 
 - `uq_lot(ship_id, medication_id, lot_number)` 위반은 409 `DUPLICATE_LOT`. 같은 로트를 추가로 받는 경우는 MVP에서 다루지 않고, 기존 로트의 수량을 늘리는 대신 거부해 `initial_quantity`가 입고 1회의 수량으로 유지되게 함.
 
+### 10. 로그인·로그아웃은 컨트롤러에서 처리.
+
+- 로그인: `formLogin`은 기본적으로 폼 파라미터를 받아, JSON 요청을 받으려면 필터를 직접 만들어야 함. 컨트롤러는 `@Valid`와 공통 에러 형식을 그대로 쓸 수 있음.
+- 로그아웃: `LogoutFilter`는 권한 검사보다 먼저 실행되어 미로그인 요청도 200이 됨. 컨트롤러로 처리하면 `anyRequest().authenticated()`가 적용되어 분기 코드 없이 401이 됨.
+- 트레이드오프: 필터 방식에서 Security가 해 주던 세션 ID 교체와 `SecurityContext` 저장을 직접 해야 함.
+
 ---
 
 ## 3. 미해결, 유보
