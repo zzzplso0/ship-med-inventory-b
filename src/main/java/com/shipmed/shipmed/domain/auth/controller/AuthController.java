@@ -10,7 +10,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,10 +27,6 @@ public class AuthController {
     public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse) {
         Authentication authentication = authService.login(request);
 
-        if (httpServletRequest.getSession(false) != null) {
-            httpServletRequest.changeSessionId();
-        }
-
         loginSessionManager.saveContext(authentication, httpServletRequest, httpServletResponse);
 
         return LoginResponse.from((CustomUserDetails) authentication.getPrincipal());
@@ -39,6 +34,6 @@ public class AuthController {
 
     @PostMapping("/logout")
     public void logout(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, Authentication authentication) {
-        new SecurityContextLogoutHandler().logout(httpServletRequest, httpServletResponse, authentication);
+        loginSessionManager.logout(authentication, httpServletRequest, httpServletResponse);
     }
 }
