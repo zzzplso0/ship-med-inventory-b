@@ -343,6 +343,34 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 	]
 ```
 
+### 4. 공통 에러 응답
+
+- 모든 에러 응답은 `error`(코드 문자열)와 `message`(기본 메시지)를 가진다. 위 엔드포인트의 `{ error:... }` 표기에서 `message`는 생략했다.
+- 추가 정보는 최상위 필드로 응답한다. 검증 실패의 필드별 오류만 요청 필드 이름과 겹치지 않도록 `fieldErrors`로 묶는다.
+- `error` 값은 `ErrorCode` enum 이름이다. 클라이언트가 분기에 쓰므로 공개한 뒤에는 이름을 바꾸지 않는다.
+- 500 응답에는 예외 메시지나 클래스 이름을 넣지 않고, 원인은 서버 로그에 남긴다.
+
+```markdown
+409 비즈니스 규칙:
+	{ error:"INSUFFICIENT_STOCK", message, requested, available }
+400 요청 본문 검증 실패:
+	{ error:"INVALID_INPUT", message, fieldErrors:{ receivedAt:"..." } }
+500 처리되지 않은 예외:
+	{ error:"INTERNAL_SERVER_ERROR", message }
+```
+
+| 상태 | `error`                                                         | 발생 조건                                                      |
+|------|-----------------------------------------------------------------|----------------------------------------------------------------|
+| 400  | `INVALID_INPUT`                                                 | 검증 실패, 잘못된 JSON·타입, 필수 파라미터 누락                |
+| 400  | `EXPIRED_ON_ARRIVAL`, `RECEIVED_AT_IN_FUTURE`                   | 입고 규칙 위반                                                 |
+| 404  | `RESOURCE_NOT_FOUND`                                            | 없는 경로. 없는 대상은 도메인별 코드(`SHIP_NOT_FOUND` 등) 사용 |
+| 405  | `METHOD_NOT_ALLOWED`                                            | 지원하지 않는 HTTP 메서드                                      |
+| 409  | `DUPLICATE_LOT`, `INSUFFICIENT_STOCK`, `IDEMPOTENCY_KEY_REUSED` | 비즈니스 충돌                                                  |
+| 500  | `INTERNAL_SERVER_ERROR`                                         | 처리되지 않은 예외                                             |
+
+- 그 밖의 4xx(415 등)는 상태 코드를 유지하고 `error`는 `INVALID_INPUT`으로 응답한다.
+- 처리 위치는 `GlobalExceptionHandler`(`@RestControllerAdvice`)다. 컨트롤러 밖의 보안 필터에서 거부된 401·403은 여기를 거치지 않으며, 응답 형식은 인증 단계에서 정한다.
+
 ---
 
 ## 4. 핵심 비즈니스 로직
