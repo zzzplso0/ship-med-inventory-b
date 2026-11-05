@@ -14,3 +14,9 @@ logging:
   level:
     org.hibernate.SQL: warn
     org.hibernate.orm.jdbc.bind: warn
+
+shipmed:
+  initial-admin:
+    login-id: ${ADMIN_LOGIN_ID}
+    name: ${ADMIN_NAME}
+    password: ${ADMIN_PASSWORD}

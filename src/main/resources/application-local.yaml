@@ -17,3 +17,9 @@ logging:
     org.hibernate.SQL: debug
     org.hibernate.orm.jdbc.bind: trace
     com.shipmed.shipmed: DEBUG
+
+shipmed:
+  initial-admin:
+    login-id: local-admin
+    name: 로컬 관리자
+    password: admin1234!
