@@ -1,5 +1,6 @@
 package com.shipmed.shipmed.global.config;
 
+import com.shipmed.shipmed.global.security.handler.CustomAccessDeniedHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -18,18 +19,37 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationEntryPoint entryPoint) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                   AuthenticationEntryPoint entryPoint,
+                                                   CustomAccessDeniedHandler customAccessDeniedHandler) throws Exception {
         http
-                .csrf(AbstractHttpConfigurer::disable)
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
-                        .anyRequest().authenticated())
+            .csrf(AbstractHttpConfigurer::disable)
+            .authorizeHttpRequests(auth -> auth
+                    .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
 
-                // 미로그인 처리.
-                .exceptionHandling(e -> e.authenticationEntryPoint(entryPoint))
+                    // 관리자.
+                    .requestMatchers(HttpMethod.POST, "/users").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/users").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/ships").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/medications").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.PUT, "/ships/*/requirements/*").hasRole("ADMIN")
 
-                // 로그아웃은 controller에서 처리.
-                .logout(AbstractHttpConfigurer::disable);
+                    // 의무사관.
+                    .requestMatchers(HttpMethod.POST, "/ships/*/lots").hasRole("MEDICAL_OFFICER")
+                    .requestMatchers(HttpMethod.POST, "/ships/*/usages").hasRole("MEDICAL_OFFICER")
+                    .requestMatchers(HttpMethod.POST, "/usages/*/cancellation").hasRole("MEDICAL_OFFICER")
+
+                    // 그 외 조회와 로그아웃.
+                    .anyRequest().authenticated())
+
+            // 미로그인 처리.
+            .exceptionHandling(e -> e
+                    .authenticationEntryPoint(entryPoint)
+                    .accessDeniedHandler(customAccessDeniedHandler)
+            )
+
+            // 로그아웃은 controller에서 처리.
+            .logout(AbstractHttpConfigurer::disable);
 
         return http.build();
     }
