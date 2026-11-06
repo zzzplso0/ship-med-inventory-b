@@ -31,7 +31,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     protected @Nullable ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         Map<String, Object> errors = new HashMap<>();
         ex.getBindingResult().getFieldErrors().forEach((fieldError) -> {
-            errors.put(fieldError.getField(), fieldError.getDefaultMessage());
+            // 타입 변환 실패의 기본 메시지에는 내부 타입 이름이 들어 있어 일반 문구로 응답한다.
+            String message = fieldError.isBindingFailure() ? "형식이 올바르지 않습니다." : fieldError.getDefaultMessage();
+            errors.put(fieldError.getField(), message);
         });
 
         return ResponseEntity.status(status)
