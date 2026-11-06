@@ -23,7 +23,7 @@
 - Java 17, Spring Boot 4, Gradle
 - PostgreSQL 17, Flyway 마이그레이션
 - Spring Data JPA (`ddl-auto: validate`), MyBatis
-    - 쓰기(등록·입고·사용·취소)는 JPA, 재고 현황 같은 조회·집계는 MyBatis.
+    - 쓰기(등록·입고·사용·취소)와 단순 목록 조회는 JPA, 재고 현황 같은 집계·복잡한 조회는 MyBatis.
 - Spring Security (세션 로그인)
 - 테스트: JUnit 5, Testcontainers(PostgreSQL)
 

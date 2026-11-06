@@ -161,7 +161,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
     - 로그인, 역할: 보안 필터(`authorizeHttpRequests`).
     - 소속 선박: `ShipAccessInterceptor`(`HandlerInterceptor`의 `preHandle`). `@Valid`는 컨트롤러 인자를 만들 때 실행되므로 서비스나 `@PreAuthorize`에서 판정하면 400이 403보다 먼저 나감.
         - `/ships/{shipId}/**` 중 컨트롤러에 매핑된 요청만 판정하며, 없는 경로는 404. 인터셉터가 경로 변수 이름으로 값을 읽으므로 선박 API의 경로 변수는 `shipId`로 통일.
-    - 형식 검증: 컨트롤러의 `@Valid` 등. 필수값 누락, 수량 0/음수, 잘못된 JSON, `Idempotency-Key` 형식.
+    - 형식 검증: 컨트롤러의 `@Valid` 등. 필수값 누락, 길이 초과, 비밀번호 규칙, 계정의 역할과 `shipId` 조합, 수량 0/음수, 잘못된 JSON, `Idempotency-Key` 형식, `page`·`size` 범위.
     - 대상 존재, 규칙 검증, 비즈니스 규칙: 서비스. 규칙 검증은 `EXPIRED_ON_ARRIVAL`, `RECEIVED_AT_IN_FUTURE`처럼 `Clock`이나 도메인 규칙이 필요한 것.
 
 ## 3. API 설계
@@ -175,7 +175,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 |--------|-----------------------------------------------|------------------------|-----------------------------|----------------------------------------------|
 | POST   | `/auth/login`                                 | 로그인                 | 누구나                      | 200 / 400 / 401                              |
 | POST   | `/auth/logout`                                | 로그아웃               | 로그인                      | 200 / 401                                    |
-| POST   | `/users`                                      | 계정 등록              | 관리자                      | 201                                          |
+| POST   | `/users`                                      | 계정 등록              | 관리자                      | 201 / 400 / 404 / 409 로그인 ID 중복         |
 | GET    | `/users`                                      | 계정 목록              | 관리자                      | 200                                          |
 | POST   | `/ships`                                      | 선박 등록              | 관리자                      | 201                                          |
 | GET    | `/ships`                                      | 선박 목록              | 로그인                      | 200                                          |
@@ -187,6 +187,22 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 | POST   | `/ships/{shipId}/usages`                      | 약품 사용 (FEFO 차감)  | 의무사관                    | 201 / 409 재고부족·키 재사용 / 200 멱등      |
 | POST   | `/usages/{usageId}/cancellation`              | 사용 취소 (로트 복원)  | 의무사관                    | 200 / 200 멱등                               |
 | GET    | `/ships/{shipId}/inventory`                   | 재고 현황(부족·임박)   | 관리자, 의무사관(소속 선박) | 200                                          |
+
+**목록 조회 공통**
+
+`GET /users`, `GET /ships`, `GET /medications`, `GET /ships/{shipId}/requirements`는 같은 페이지 응답을 쓴다. 재고 현황은 집계 결과라 적용하지 않는다. 값의 범위와 기본값은 `requirements.md` 4장.
+
+```markdown
+요청:
+	?page=0&size=20
+200:
+	{ content:[ ... ], page, size, totalElements, totalPages, hasNext }
+```
+
+- 조회는 JPA로 한다. MyBatis는 재고 현황 같은 집계와 복잡한 조회에만 쓴다.
+- 범위를 벗어난 값을 조용히 보정하지 않도록 `Pageable` 자동 변환 대신 `page`, `size`를 `@RequestParam`으로 받아 검증한다.
+- Spring의 `Page`를 그대로 직렬화하지 않고 전용 `PageResponse`로 응답한다.
+- 비치 기준 목록은 약품 이름이 필요하므로 fetch join으로 N+1을 막는다.
 
 ---
 
@@ -265,15 +281,20 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 201:
 	{ id, loginId, name, role, shipId }
 400:
-	필수값 누락 // 의무사관인데 shipId 없음, 관리자인데 shipId 있음
+	필수값 누락 // 길이 초과 // 비밀번호 규칙 위반 // 의무사관인데 shipId 없음, 관리자인데 shipId 있음
 404:
 	ship 없음
+409:
+	{ error:DUPLICATE_LOGIN_ID } // 같은 loginId가 이미 있음 (uq_user_login)
 ```
+
+- 비밀번호 규칙은 계정 등록에만 적용한다. 첫 관리자 설정값과 로그인 요청에는 적용하지 않는다.
+- 72바이트 상한은 UTF-8 기준이다. `@Size`는 글자 수만 세므로 바이트 길이는 따로 검증한다.
 
 - GET `/users` — 계정 목록 (관리자)
 
 ```markdown
-200: [ { id, loginId, name, role, shipId }, ... ]
+200: 페이지 응답(3.1), content:[ { id, loginId, name, role, shipId }, ... ]
 ```
 
 - POST `/ships` — 선박 등록 (관리자)
@@ -282,13 +303,13 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 요청:
 	{ name }
 201:
-	{ id, name } // 400 필수값 누락
+	{ id, name } // 400 필수값 누락, 길이 초과
 ```
 
 - GET `/ships` — 선박 목록
 
 ```markdown
-200: [ { id, name }, ... ]
+200: 페이지 응답(3.1), content:[ { id, name }, ... ]
 ```
 
 - POST `/ships/{shipId}/lots` — 재고 입고
@@ -311,7 +332,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 요청:
 	{ name, category, unit }
 201:
-	{ id, name, category, unit } // 400 필수값 누락
+	{ id, name, category, unit } // 400 필수값 누락, 길이 초과
 ```
 
 - PUT `/ships/{shipId}/requirements/{medicationId}` — 비치 기준 설정(upsert)
@@ -338,13 +359,13 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 - GET `/medications`
 
 ```markdown
-200: [ { id, name, category, unit }, ...]
+200: 페이지 응답(3.1), content:[ { id, name, category, unit }, ... ]
 ```
 
 - GET `/ships/{shipId}/requirements`
 
 ```markdown
-200: [ { medicationId, medicationName, minQuantity }, ...]
+200: 페이지 응답(3.1), content:[ { medicationId, medicationName, minQuantity }, ... ]
 ```
 
 - GET `/ships/{shipId}/inventory` — 부족·임박을 한눈에
@@ -383,8 +404,10 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 | 401  | `LOGIN_FAILED`                                                  | 로그인 ID 또는 비밀번호 불일치                                 |
 | 403  | `ACCESS_DENIED`                                                 | 역할에 없는 기능, 소속이 아닌 선박 요청                        |
 | 404  | `RESOURCE_NOT_FOUND`                                            | 없는 경로. 없는 대상은 도메인별 코드(`SHIP_NOT_FOUND` 등) 사용 |
+| 404  | `SHIP_NOT_FOUND`, `MEDICATION_NOT_FOUND`                        | 없는 선박 또는 약품                                            |
 | 405  | `METHOD_NOT_ALLOWED`                                            | 지원하지 않는 HTTP 메서드                                      |
 | 409  | `DUPLICATE_LOT`, `INSUFFICIENT_STOCK`, `IDEMPOTENCY_KEY_REUSED` | 비즈니스 충돌                                                  |
+| 409  | `DUPLICATE_LOGIN_ID`                                            | 로그인 ID 중복                                                 |
 | 500  | `INTERNAL_SERVER_ERROR`                                         | 처리되지 않은 예외                                             |
 
 - 그 밖의 4xx(415 등)는 상태 코드를 유지하고 `error`는 `INVALID_INPUT`으로 응답한다.
@@ -480,3 +503,5 @@ ON uq_usage_idempotency 위반:
 - 차감, 복원 대상 로트를 `SELECT ... FOR UPDATE`로 잠근 뒤 트랜잭션 안에서 처리한다.
 - 사용 기록 요청은 `Idempotency-Key`로 식별하고 `UNIQUE(user_id, idempotency_key)`로 재시도 중복 차감을 차단한다.
 - 같은 키 동시 요청으로 UNIQUE 위반이 나면 롤백 후 새 트랜잭션에서 기존 기록을 조회해 반환한다(4.1의 6단계).
+- 계정 등록은 먼저 `loginId` 중복을 확인해 409로 응답한다. 동시 요청이 확인을 함께 통과하면 늦은 쪽의 `uq_user_login` 위반을 같은 409로 변환한다.
+- 비치 기준의 동시 신규 등록으로 `uq_requirement` 위반이 나면 롤백 후 새 트랜잭션에서 기존 행을 수정하고 200을 반환한다. 마지막에 처리된 값이 남는다.
