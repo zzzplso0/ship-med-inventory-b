@@ -160,7 +160,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 - 판정 위치:
     - 로그인, 역할: 보안 필터(`authorizeHttpRequests`).
     - 소속 선박: `ShipAccessInterceptor`(`HandlerInterceptor`의 `preHandle`). `@Valid`는 컨트롤러 인자를 만들 때 실행되므로 서비스나 `@PreAuthorize`에서 판정하면 400이 403보다 먼저 나감.
-        - `/ships/{shipId}/**` 중 컨트롤러에 매핑된 요청만 판정하며, 없는 경로는 404. 인터셉터가 경로 변수 이름으로 값을 읽으므로 선박 API의 경로 변수는 `shipId`로 통일.
+        - `/api/ships/{shipId}/**` 중 컨트롤러에 매핑된 요청만 판정하며, 없는 경로는 404. 인터셉터가 경로 변수 이름으로 값을 읽으므로 선박 API의 경로 변수는 `shipId`로 통일.
     - 형식 검증: 컨트롤러의 `@Valid` 등. 필수값 누락, 길이 초과, 비밀번호 규칙, 계정의 역할과 `shipId` 조합, 수량 0/음수, 잘못된 JSON, `Idempotency-Key` 형식, `page`·`size` 범위.
     - 대상 존재, 규칙 검증, 비즈니스 규칙: 서비스. 규칙 검증은 `EXPIRED_ON_ARRIVAL`, `RECEIVED_AT_IN_FUTURE`처럼 `Clock`이나 도메인 규칙이 필요한 것.
 
@@ -168,29 +168,30 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 
 ### 1. 엔드포인트 요약
 
+- 모든 API 경로는 `/api`로 시작한다.
 - 사용자는 세션으로 식별. `Idempotency-Key` 헤더는 사용 기록에만 보냄.
 - 상태 코드는 조회, 멱등 재요청 200, 생성 201, 입력 오류 400, 미로그인 401, 권한 없음 403, 없음 404, 비즈니스 충돌 409.
 
-| 메서드 | 경로                                          | 기능                   | 권한                        | 주요 응답                                    |
-|--------|-----------------------------------------------|------------------------|-----------------------------|----------------------------------------------|
-| POST   | `/auth/login`                                 | 로그인                 | 누구나                      | 200 / 400 / 401                              |
-| POST   | `/auth/logout`                                | 로그아웃               | 로그인                      | 200 / 401                                    |
-| POST   | `/users`                                      | 계정 등록              | 관리자                      | 201 / 400 / 404 / 409 로그인 ID 중복         |
-| GET    | `/users`                                      | 계정 목록              | 관리자                      | 200                                          |
-| POST   | `/ships`                                      | 선박 등록              | 관리자                      | 201                                          |
-| GET    | `/ships`                                      | 선박 목록              | 로그인                      | 200                                          |
-| POST   | `/medications`                                | 약품 등록              | 관리자                      | 201                                          |
-| GET    | `/medications`                                | 약품 목록              | 로그인                      | 200                                          |
-| PUT    | `/ships/{shipId}/requirements/{medicationId}` | 비치 기준 설정(upsert) | 관리자                      | 200 수정 / 201 신규                          |
-| GET    | `/ships/{shipId}/requirements`                | 비치 기준 목록         | 관리자, 의무사관(소속 선박) | 200                                          |
-| POST   | `/ships/{shipId}/lots`                        | 재고 입고              | 의무사관                    | 201 / 400 만료·수량·입고시각 / 409 중복 로트 |
-| POST   | `/ships/{shipId}/usages`                      | 약품 사용 (FEFO 차감)  | 의무사관                    | 201 / 409 재고부족·키 재사용 / 200 멱등      |
-| POST   | `/usages/{usageId}/cancellation`              | 사용 취소 (로트 복원)  | 의무사관                    | 200 / 200 멱등                               |
-| GET    | `/ships/{shipId}/inventory`                   | 재고 현황(부족·임박)   | 관리자, 의무사관(소속 선박) | 200                                          |
+| 메서드 | 경로                                              | 기능                   | 권한                        | 주요 응답                                    |
+|--------|---------------------------------------------------|------------------------|-----------------------------|----------------------------------------------|
+| POST   | `/api/auth/login`                                 | 로그인                 | 누구나                      | 200 / 400 / 401                              |
+| POST   | `/api/auth/logout`                                | 로그아웃               | 로그인                      | 200 / 401                                    |
+| POST   | `/api/users`                                      | 계정 등록              | 관리자                      | 201 / 400 / 404 / 409 로그인 ID 중복         |
+| GET    | `/api/users`                                      | 계정 목록              | 관리자                      | 200                                          |
+| POST   | `/api/ships`                                      | 선박 등록              | 관리자                      | 201                                          |
+| GET    | `/api/ships`                                      | 선박 목록              | 로그인                      | 200                                          |
+| POST   | `/api/medications`                                | 약품 등록              | 관리자                      | 201                                          |
+| GET    | `/api/medications`                                | 약품 목록              | 로그인                      | 200                                          |
+| PUT    | `/api/ships/{shipId}/requirements/{medicationId}` | 비치 기준 설정(upsert) | 관리자                      | 200 수정 / 201 신규                          |
+| GET    | `/api/ships/{shipId}/requirements`                | 비치 기준 목록         | 관리자, 의무사관(소속 선박) | 200                                          |
+| POST   | `/api/ships/{shipId}/lots`                        | 재고 입고              | 의무사관                    | 201 / 400 만료·수량·입고시각 / 409 중복 로트 |
+| POST   | `/api/ships/{shipId}/usages`                      | 약품 사용 (FEFO 차감)  | 의무사관                    | 201 / 409 재고부족·키 재사용 / 200 멱등      |
+| POST   | `/api/usages/{usageId}/cancellation`              | 사용 취소 (로트 복원)  | 의무사관                    | 200 / 200 멱등                               |
+| GET    | `/api/ships/{shipId}/inventory`                   | 재고 현황(부족·임박)   | 관리자, 의무사관(소속 선박) | 200                                          |
 
 **목록 조회 공통**
 
-`GET /users`, `GET /ships`, `GET /medications`, `GET /ships/{shipId}/requirements`는 같은 페이지 응답을 쓴다. 재고 현황은 집계 결과라 적용하지 않는다. 값의 범위와 기본값은 `requirements.md` 4장.
+`GET /api/users`, `GET /api/ships`, `GET /api/medications`, `GET /api/ships/{shipId}/requirements`는 같은 페이지 응답을 쓴다. 재고 현황은 집계 결과라 적용하지 않는다. 값의 범위와 기본값은 `requirements.md` 4장.
 
 ```markdown
 요청:
@@ -200,7 +201,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 ```
 
 - 조회는 JPA로 한다. MyBatis는 재고 현황 같은 집계와 복잡한 조회에만 쓴다.
-- 범위를 벗어난 값을 조용히 보정하지 않도록 `Pageable` 자동 변환 대신 `page`, `size`를 `@RequestParam`으로 받아 검증한다.
+- 범위를 벗어난 값을 조용히 보정하지 않도록 `Pageable` 자동 변환 대신 `page`, `size`를 `PageQuery`와 `@Valid @ModelAttribute`로 받아 검증한다. 기본값, 범위, 정렬은 `PageQuery`에 모은다.
 - Spring의 `Page`를 그대로 직렬화하지 않고 전용 `PageResponse`로 응답한다.
 - 비치 기준 목록은 약품 이름이 필요하므로 fetch join으로 N+1을 막는다.
 
@@ -208,7 +209,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 
 ### 2. 핵심 엔드포인트 상세
 
-**약품 사용 — `POST /ships/{shipId}/usages`**
+**약품 사용 — `POST /api/ships/{shipId}/usages`**
 
 ```
 요청:
@@ -233,7 +234,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 	동일 Idempotency-Key 재요청 → 기존 201 본문 반환
 ```
 
-**사용 취소 — `POST /usages/{usageId}/cancellation`**
+**사용 취소 — `POST /api/usages/{usageId}/cancellation`**
 
 ```
 요청:
@@ -253,7 +254,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 
 ### 3. 그 밖의 엔드포인트
 
-- POST `/auth/login` — 로그인
+- POST `/api/auth/login` — 로그인
 
 ```markdown
 요청:
@@ -266,14 +267,14 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 	{ error:LOGIN_FAILED } // 로그인 ID 또는 비밀번호 불일치. 없는 계정도 같은 응답
 ```
 
-- POST `/auth/logout` — 로그아웃
+- POST `/api/auth/logout` — 로그아웃
 
 ```markdown
 200: 세션 무효화
 401: { error:UNAUTHORIZED } // 로그인 안 함
 ```
 
-- POST `/users` — 계정 등록 (관리자)
+- POST `/api/users` — 계정 등록 (관리자)
 
 ```markdown
 요청:
@@ -291,13 +292,13 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 - 비밀번호 규칙은 계정 등록에만 적용한다. 첫 관리자 설정값과 로그인 요청에는 적용하지 않는다.
 - 72바이트 상한은 UTF-8 기준이다. `@Size`는 글자 수만 세므로 바이트 길이는 따로 검증한다.
 
-- GET `/users` — 계정 목록 (관리자)
+- GET `/api/users` — 계정 목록 (관리자)
 
 ```markdown
 200: 페이지 응답(3.1), content:[ { id, loginId, name, role, shipId }, ... ]
 ```
 
-- POST `/ships` — 선박 등록 (관리자)
+- POST `/api/ships` — 선박 등록 (관리자)
 
 ```markdown
 요청:
@@ -306,13 +307,13 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 	{ id, name } // 400 필수값 누락, 길이 초과
 ```
 
-- GET `/ships` — 선박 목록
+- GET `/api/ships` — 선박 목록
 
 ```markdown
 200: 페이지 응답(3.1), content:[ { id, name }, ... ]
 ```
 
-- POST `/ships/{shipId}/lots` — 재고 입고
+- POST `/api/ships/{shipId}/lots` — 재고 입고
 
 ```markdown
 요청:
@@ -326,7 +327,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 	{ error:DUPLICATE_LOT } // 같은 배·약품에 같은 lotNumber가 이미 있음 (uq_lot)
 ```
 
-- POST `/medications` — 약품 등록
+- POST `/api/medications` — 약품 등록
 
 ```markdown
 요청:
@@ -335,7 +336,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 	{ id, name, category, unit } // 400 필수값 누락, 길이 초과
 ```
 
-- PUT `/ships/{shipId}/requirements/{medicationId}` — 비치 기준 설정(upsert)
+- PUT `/api/ships/{shipId}/requirements/{medicationId}` — 비치 기준 설정(upsert)
 
 ```markdown
 요청:
@@ -346,7 +347,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 	minQuantity < 0 // 404 ship·medication 없음
 ```
 
-- POST `/lots/{lotId}/disposal` — 로트 폐기 **(이후 단계, MVP 미포함)**
+- POST `/api/lots/{lotId}/disposal` — 로트 폐기 **(이후 단계, MVP 미포함)**
 
 ```markdown
 요청:
@@ -356,19 +357,19 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 404: // 200 이미 폐기됨 → 멱등
 ```
 
-- GET `/medications`
+- GET `/api/medications`
 
 ```markdown
 200: 페이지 응답(3.1), content:[ { id, name, category, unit }, ... ]
 ```
 
-- GET `/ships/{shipId}/requirements`
+- GET `/api/ships/{shipId}/requirements`
 
 ```markdown
 200: 페이지 응답(3.1), content:[ { medicationId, medicationName, minQuantity }, ... ]
 ```
 
-- GET `/ships/{shipId}/inventory` — 부족·임박을 한눈에
+- GET `/api/ships/{shipId}/inventory` — 부족·임박을 한눈에
 
 조회 대상 약품은 해당 배의 (비치 기준이 있는 약품 ∪ 로트가 있는 약품)이다. 기준만 있고 로트가 없는 약품은 `available:0`, 로트만 있고 기준이 없는 약품은 `requirementSet:false`로 나온다.
 
@@ -384,6 +385,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 
 - 모든 에러 응답은 `error`(코드 문자열)와 `message`(기본 메시지)를 가진다. 위 엔드포인트의 `{ error:... }` 표기에서 `message`는 생략했다.
 - 추가 정보는 최상위 필드로 응답한다. 검증 실패의 필드별 오류만 요청 필드 이름과 겹치지 않도록 `fieldErrors`로 묶는다.
+- `fieldErrors`의 타입 변환 실패(`page=abc` 등)에는 내부 타입 정보가 드러나지 않도록 기본 메시지 대신 일반 문구를 넣는다.
 - `error` 값은 `ErrorCode` enum 이름이다. 클라이언트가 분기에 쓰므로 공개한 뒤에는 이름을 바꾸지 않는다.
 - 500 응답에는 예외 메시지나 클래스 이름을 넣지 않고, 원인은 서버 로그에 남긴다.
 

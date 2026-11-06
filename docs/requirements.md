@@ -55,9 +55,9 @@
     - 신규 201, 수정 200,
     - 같은 선박·약품의 동시 신규 요청 → 둘 다 성공(201과 200). 행은 1개이고 마지막에 처리된 값이 남음.
 - 목록 조회:
-    - `page`는 0부터, 생략 시 0. `size`는 1~100, 생략 시 20. 정렬은 `id` 오름차순,
+    - `page`는 0~21474836, 생략 시 0. `size`는 1~100, 생략 시 20. 정렬은 `id` 오름차순,
     - 범위를 벗어나거나 숫자가 아닌 `page`, `size` → 400,
-    - 마지막 페이지 뒤의 `page` → 200, 빈 `content`.
+    - 범위 안에서 마지막 페이지 뒤의 `page` → 200, 빈 `content`.
 - 재고 경계:
     - 가용 0/부족 → 409+가용 수량 메시지,
     - 잔량 합 = 요청량 → 정상,
@@ -163,7 +163,7 @@
     - When/Then: (a) 파라미터 없음 → 200, content 20개, totalElements:25, totalPages:2, hasNext:true.
                  (b) page=1 → 200, content 5개, hasNext:false.
                  (c) page=2 → 200, 빈 content.
-                 (d) page=-1, size=0, size=101, page=abc → 400.
+                 (d) page=-1, page=21474837, size=0, size=101, page=abc → 400.
 - 미로그인
     - When: 세션 없이 재고 현황 조회.
     - Then: 401.
