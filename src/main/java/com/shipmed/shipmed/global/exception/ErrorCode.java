@@ -11,6 +11,9 @@ public enum ErrorCode {
     LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "로그인 ID 또는 비밀번호가 올바르지 않습니다."),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 리소스 접근 권한이 없습니다."),
 
+    // ship
+    SHIP_NOT_FOUND(HttpStatus.NOT_FOUND, "선박을 찾을 수 없습니다."),
+
     // server
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다."),

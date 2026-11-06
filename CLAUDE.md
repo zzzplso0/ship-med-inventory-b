@@ -24,6 +24,7 @@
 - PostgreSQL 17, Flyway 마이그레이션
 - Spring Data JPA (`ddl-auto: validate`), MyBatis
     - 쓰기(등록·입고·사용·취소)와 단순 목록 조회는 JPA, 재고 현황 같은 집계·복잡한 조회는 MyBatis.
+- MapStruct: 엔티티를 응답 DTO로 변환
 - Spring Security (세션 로그인)
 - 테스트: JUnit 5, Testcontainers(PostgreSQL)
 

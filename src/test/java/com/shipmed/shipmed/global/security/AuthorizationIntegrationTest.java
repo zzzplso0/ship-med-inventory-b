@@ -62,77 +62,70 @@ class AuthorizationIntegrationTest {
 
 	@Test
 	@DisplayName("미로그인 요청은 401")
-	void unauthenticated() throws Exception {
-		mockMvc.perform(get("/ships/1/inventory"))
+	void givenNotLoggedIn_whenRequestShipApi_thenReturns401() throws Exception {
+		mockMvc.perform(get("/api/ships/1/inventory"))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.error").value("UNAUTHORIZED"));
 	}
 
 	@Test
 	@DisplayName("의무사관이 관리자 API를 호출하면 403")
-	void officerCallsAdminApi() throws Exception {
-		expectAccessDenied(post("/users"), officerOfShip1);
-		expectAccessDenied(get("/users"), officerOfShip1);
-		expectAccessDenied(post("/ships"), officerOfShip1);
-		expectAccessDenied(post("/medications"), officerOfShip1);
-		expectAccessDenied(put("/ships/1/requirements/1"), officerOfShip1);
+	void givenOfficer_whenCallAdminApi_thenReturns403() throws Exception {
+		expectAccessDenied(post("/api/users"), officerOfShip1);
+		expectAccessDenied(get("/api/users"), officerOfShip1);
+		expectAccessDenied(post("/api/ships"), officerOfShip1);
+		expectAccessDenied(post("/api/medications"), officerOfShip1);
+		expectAccessDenied(put("/api/ships/1/requirements/1"), officerOfShip1);
 	}
 
 	@Test
 	@DisplayName("관리자가 의무사관 API를 호출하면 403")
-	void adminCallsOfficerApi() throws Exception {
-		expectAccessDenied(jsonPost("/ships/1/lots", VALID_BODY), admin);
-		expectAccessDenied(jsonPost("/ships/1/usages", VALID_BODY), admin);
-		expectAccessDenied(post("/usages/1/cancellation"), admin);
+	void givenAdmin_whenCallOfficerApi_thenReturns403() throws Exception {
+		expectAccessDenied(jsonPost("/api/ships/1/lots", VALID_BODY), admin);
+		expectAccessDenied(jsonPost("/api/ships/1/usages", VALID_BODY), admin);
+		expectAccessDenied(post("/api/usages/1/cancellation"), admin);
 	}
 
 	@Test
 	@DisplayName("의무사관이 다른 선박, 없는 선박, 잘못된 형식의 선박을 요청하면 403")
-	void officerRequestsOtherShip() throws Exception {
-		expectAccessDenied(get("/ships/2/inventory"), officerOfShip1);
-		expectAccessDenied(get("/ships/999/inventory"), officerOfShip1);
-		expectAccessDenied(get("/ships/abc/inventory"), officerOfShip1);
-		expectAccessDenied(jsonPost("/ships/2/usages", VALID_BODY), officerOfShip1);
+	void givenOfficer_whenRequestOtherShip_thenReturns403() throws Exception {
+		expectAccessDenied(get("/api/ships/2/inventory"), officerOfShip1);
+		expectAccessDenied(get("/api/ships/999/inventory"), officerOfShip1);
+		expectAccessDenied(get("/api/ships/abc/inventory"), officerOfShip1);
 	}
 
 	@Test
 	@DisplayName("다른 선박에 잘못된 본문을 보내면 400이 아니라 403")
-	void otherShipWithInvalidBody() throws Exception {
-		expectAccessDenied(jsonPost("/ships/2/usages", INVALID_BODY), officerOfShip1);
+	void givenOtherShipAndInvalidBody_whenPostUsage_thenReturns403() throws Exception {
+		expectAccessDenied(jsonPost("/api/ships/2/usages", INVALID_BODY), officerOfShip1);
 	}
 
 	@Test
 	@DisplayName("자기 선박에 잘못된 본문을 보내면 400")
-	void ownShipWithInvalidBody() throws Exception {
-		mockMvc.perform(jsonPost("/ships/1/usages", INVALID_BODY).with(user(officerOfShip1)))
+	void givenOwnShipAndInvalidBody_whenPostUsage_thenReturns400() throws Exception {
+		mockMvc.perform(jsonPost("/api/ships/1/usages", INVALID_BODY).with(user(officerOfShip1)))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.error").value("INVALID_INPUT"));
 	}
 
 	@Test
 	@DisplayName("의무사관은 자기 선박을 요청할 수 있다")
-	void officerRequestsOwnShip() throws Exception {
-		mockMvc.perform(get("/ships/1/inventory").with(user(officerOfShip1)))
-				.andExpect(status().isOk());
-		mockMvc.perform(jsonPost("/ships/1/usages", VALID_BODY).with(user(officerOfShip1)))
+	void givenOfficer_whenRequestOwnShip_thenReturns200() throws Exception {
+		mockMvc.perform(get("/api/ships/1/inventory").with(user(officerOfShip1)))
 				.andExpect(status().isOk());
 	}
 
 	@Test
 	@DisplayName("관리자는 소속과 무관하게 선박을 조회할 수 있다")
-	void adminReadsAnyShip() throws Exception {
-		mockMvc.perform(get("/ships/1/inventory").with(user(admin)))
-				.andExpect(status().isOk());
-		mockMvc.perform(get("/ships/2/inventory").with(user(admin)))
+	void givenAdmin_whenRequestAnyShip_thenReturns200() throws Exception {
+		mockMvc.perform(get("/api/ships/2/inventory").with(user(admin)))
 				.andExpect(status().isOk());
 	}
 
 	@Test
 	@DisplayName("컨트롤러가 없는 경로는 선박과 무관하게 404")
-	void unmappedPath() throws Exception {
-		mockMvc.perform(get("/ships/1/unknown").with(user(officerOfShip1)))
-				.andExpect(status().isNotFound());
-		mockMvc.perform(get("/ships/2/unknown").with(user(officerOfShip1)))
+	void givenUnmappedPath_whenRequest_thenReturns404() throws Exception {
+		mockMvc.perform(get("/api/ships/2/unknown").with(user(officerOfShip1)))
 				.andExpect(status().isNotFound());
 	}
 
@@ -156,11 +149,11 @@ class AuthorizationIntegrationTest {
 	@RestController
 	static class TestShipController {
 
-		@GetMapping("/ships/{shipId}/inventory")
+		@GetMapping("/api/ships/{shipId}/inventory")
 		void inventory(@PathVariable Long shipId) {
 		}
 
-		@PostMapping("/ships/{shipId}/usages")
+		@PostMapping("/api/ships/{shipId}/usages")
 		void usages(@PathVariable Long shipId, @Valid @RequestBody TestRequest request) {
 		}
 	}
