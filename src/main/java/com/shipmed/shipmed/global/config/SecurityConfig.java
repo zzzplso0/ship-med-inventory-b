@@ -25,19 +25,19 @@ public class SecurityConfig {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
-                    .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
 
                     // 관리자.
-                    .requestMatchers(HttpMethod.POST, "/users").hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.GET, "/users").hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.POST, "/ships").hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.POST, "/medications").hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.PUT, "/ships/*/requirements/*").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/api/users").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/api/users").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/api/ships").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/api/medications").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.PUT, "/api/ships/*/requirements/*").hasRole("ADMIN")
 
                     // 의무사관.
-                    .requestMatchers(HttpMethod.POST, "/ships/*/lots").hasRole("MEDICAL_OFFICER")
-                    .requestMatchers(HttpMethod.POST, "/ships/*/usages").hasRole("MEDICAL_OFFICER")
-                    .requestMatchers(HttpMethod.POST, "/usages/*/cancellation").hasRole("MEDICAL_OFFICER")
+                    .requestMatchers(HttpMethod.POST, "/api/ships/*/lots").hasRole("MEDICAL_OFFICER")
+                    .requestMatchers(HttpMethod.POST, "/api/ships/*/usages").hasRole("MEDICAL_OFFICER")
+                    .requestMatchers(HttpMethod.POST, "/api/usages/*/cancellation").hasRole("MEDICAL_OFFICER")
 
                     // 그 외 조회와 로그아웃.
                     .anyRequest().authenticated())
