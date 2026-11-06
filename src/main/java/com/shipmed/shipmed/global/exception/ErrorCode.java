@@ -9,6 +9,7 @@ public enum ErrorCode {
     // auth
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "로그인 ID 또는 비밀번호가 올바르지 않습니다."),
+    ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 리소스 접근 권한이 없습니다."),
 
     // server
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
