@@ -159,7 +159,8 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
     - 사용 취소의 본인 기록 판정(403)은 대상을 조회해야 하므로 대상 존재(404) 다음에 한다(4.2).
 - 판정 위치:
     - 로그인, 역할: 보안 필터(`authorizeHttpRequests`).
-    - 소속 선박: `HandlerInterceptor`의 `preHandle`. `@Valid`는 컨트롤러 인자를 만들 때 실행되므로 서비스나 `@PreAuthorize`에서 판정하면 400이 403보다 먼저 나감.
+    - 소속 선박: `ShipAccessInterceptor`(`HandlerInterceptor`의 `preHandle`). `@Valid`는 컨트롤러 인자를 만들 때 실행되므로 서비스나 `@PreAuthorize`에서 판정하면 400이 403보다 먼저 나감.
+        - `/ships/{shipId}/**` 중 컨트롤러에 매핑된 요청만 판정하며, 없는 경로는 404. 인터셉터가 경로 변수 이름으로 값을 읽으므로 선박 API의 경로 변수는 `shipId`로 통일.
     - 형식 검증: 컨트롤러의 `@Valid` 등. 필수값 누락, 수량 0/음수, 잘못된 JSON, `Idempotency-Key` 형식.
     - 대상 존재, 규칙 검증, 비즈니스 규칙: 서비스. 규칙 검증은 `EXPIRED_ON_ARRIVAL`, `RECEIVED_AT_IN_FUTURE`처럼 `Clock`이나 도메인 규칙이 필요한 것.
 
@@ -380,13 +381,14 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 | 400  | `EXPIRED_ON_ARRIVAL`, `RECEIVED_AT_IN_FUTURE`                   | 입고 규칙 위반                                                 |
 | 401  | `UNAUTHORIZED`                                                  | 로그인하지 않은 요청                                           |
 | 401  | `LOGIN_FAILED`                                                  | 로그인 ID 또는 비밀번호 불일치                                 |
+| 403  | `ACCESS_DENIED`                                                 | 역할에 없는 기능, 소속이 아닌 선박 요청                        |
 | 404  | `RESOURCE_NOT_FOUND`                                            | 없는 경로. 없는 대상은 도메인별 코드(`SHIP_NOT_FOUND` 등) 사용 |
 | 405  | `METHOD_NOT_ALLOWED`                                            | 지원하지 않는 HTTP 메서드                                      |
 | 409  | `DUPLICATE_LOT`, `INSUFFICIENT_STOCK`, `IDEMPOTENCY_KEY_REUSED` | 비즈니스 충돌                                                  |
 | 500  | `INTERNAL_SERVER_ERROR`                                         | 처리되지 않은 예외                                             |
 
 - 그 밖의 4xx(415 등)는 상태 코드를 유지하고 `error`는 `INVALID_INPUT`으로 응답한다.
-- 처리 위치는 `GlobalExceptionHandler`(`@RestControllerAdvice`)다. 보안 필터에서 거부된 요청은 여기를 거치지 않으므로, 미로그인 401은 `CustomAuthenticationEntryPoint`가 같은 형식으로 직접 응답한다. 403의 응답은 권한 판정을 구현할 때 같은 형식으로 맞춘다.
+- 처리 위치는 `GlobalExceptionHandler`(`@RestControllerAdvice`)다. 보안 필터에서 거부된 요청은 여기를 거치지 않으므로, 미로그인 401은 `CustomAuthenticationEntryPoint`가, 역할 위반 403은 `CustomAccessDeniedHandler`가 같은 형식으로 직접 응답한다. 소속 선박 403은 인터셉터가 `BusinessException`을 던져 `GlobalExceptionHandler`가 처리한다.
 
 ---
 
