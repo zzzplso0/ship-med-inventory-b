@@ -333,7 +333,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 요청:
 	{ name, category, unit }
 201:
-	{ id, name, category, unit } // 400 필수값 누락, 길이 초과
+	{ id, name, category, unit } // 400 필수값 누락, 길이 초과, 공백만 있는 category
 ```
 
 - PUT `/api/ships/{shipId}/requirements/{medicationId}` — 비치 기준 설정(upsert)
