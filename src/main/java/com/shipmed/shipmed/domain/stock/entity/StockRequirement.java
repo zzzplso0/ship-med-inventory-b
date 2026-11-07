@@ -30,4 +30,8 @@ public class StockRequirement extends BaseEntity {
         this.ship = ship;
         this.medication = medication;
     }
+
+    public void changeMinQuantity(int newMinQuantity) {
+        this.minQuantity = newMinQuantity;
+    }
 }

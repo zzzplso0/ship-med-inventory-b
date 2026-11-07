@@ -20,6 +20,9 @@ public enum ErrorCode {
     // user
     DUPLICATE_LOGIN_ID(HttpStatus.CONFLICT, "이미 사용 중인 로그인 ID입니다."),
 
+    // stock_requirement
+    REQUIREMENT_CONFLICT(HttpStatus.CONFLICT, "같은 요청이 이미 존재합니다. 다시 시도해 주세요."),
+
     // server
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다."),
