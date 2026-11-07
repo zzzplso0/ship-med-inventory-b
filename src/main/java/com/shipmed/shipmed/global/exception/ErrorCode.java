@@ -17,6 +17,9 @@ public enum ErrorCode {
     // medication
     MEDICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "약품을 찾을 수 없습니다."),
 
+    // user
+    DUPLICATE_LOGIN_ID(HttpStatus.CONFLICT, "이미 사용 중인 로그인 ID입니다."),
+
     // server
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다."),
