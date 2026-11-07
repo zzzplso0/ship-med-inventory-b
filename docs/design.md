@@ -182,7 +182,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 | GET    | `/api/ships`                                      | 선박 목록              | 로그인                      | 200                                          |
 | POST   | `/api/medications`                                | 약품 등록              | 관리자                      | 201                                          |
 | GET    | `/api/medications`                                | 약품 목록              | 로그인                      | 200                                          |
-| PUT    | `/api/ships/{shipId}/requirements/{medicationId}` | 비치 기준 설정(upsert) | 관리자                      | 200 수정 / 201 신규                          |
+| PUT    | `/api/ships/{shipId}/requirements/{medicationId}` | 비치 기준 설정(upsert) | 관리자                      | 200 수정 / 201 신규 / 409 신규 요청 겹침     |
 | GET    | `/api/ships/{shipId}/requirements`                | 비치 기준 목록         | 관리자, 의무사관(소속 선박) | 200                                          |
 | POST   | `/api/ships/{shipId}/lots`                        | 재고 입고              | 의무사관                    | 201 / 400 만료·수량·입고시각 / 409 중복 로트 |
 | POST   | `/api/ships/{shipId}/usages`                      | 약품 사용 (FEFO 차감)  | 의무사관                    | 201 / 409 재고부족·키 재사용 / 200 멱등      |
@@ -345,6 +345,8 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 	수정 // 201 신규  { shipId, medicationId, minQuantity }
 400:
 	minQuantity < 0 // 404 ship·medication 없음
+409:
+	{ error:REQUIREMENT_CONFLICT } // 신규 요청이 겹침 (uq_requirement)
 ```
 
 - POST `/api/lots/{lotId}/disposal` — 로트 폐기 **(이후 단계, MVP 미포함)**
@@ -410,6 +412,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 | 405  | `METHOD_NOT_ALLOWED`                                            | 지원하지 않는 HTTP 메서드                                      |
 | 409  | `DUPLICATE_LOT`, `INSUFFICIENT_STOCK`, `IDEMPOTENCY_KEY_REUSED` | 비즈니스 충돌                                                  |
 | 409  | `DUPLICATE_LOGIN_ID`                                            | 로그인 ID 중복                                                 |
+| 409  | `REQUIREMENT_CONFLICT`                                          | 비치 기준 신규 요청이 겹침                                     |
 | 500  | `INTERNAL_SERVER_ERROR`                                         | 처리되지 않은 예외                                             |
 
 - 그 밖의 4xx(415 등)는 상태 코드를 유지하고 `error`는 `INVALID_INPUT`으로 응답한다.
@@ -508,4 +511,4 @@ ON uq_usage_idempotency 위반:
 - 계정 등록은 먼저 `loginId` 중복을 확인해 409로 응답한다. 동시 요청이 확인을 함께 통과하면 늦은 쪽의 `uq_user_login` 위반을 같은 409로 변환한다.
     - `saveAndFlush`로 위반을 바로 일으키고, 제약 이름이 `uq_user_login`일 때만 변환한다. 다른 제약 위반은 그대로 던진다.
     - 위반 후 추가 쿼리 없이 예외를 던져 롤백하므로 새 트랜잭션은 필요 없다.
-- 비치 기준의 동시 신규 등록으로 `uq_requirement` 위반이 나면 롤백 후 새 트랜잭션에서 기존 행을 수정하고 200을 반환한다. 마지막에 처리된 값이 남는다.
+- 비치 기준은 기존 행이 있으면 수정하고, 없으면 `saveAndFlush`로 저장한다. 신규 요청이 겹쳐 `uq_requirement` 위반이 나면 409 `REQUIREMENT_CONFLICT`로 변환하고 롤백한다. 다른 제약 위반은 그대로 던진다.
