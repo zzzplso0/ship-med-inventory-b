@@ -23,6 +23,11 @@ public enum ErrorCode {
     // stock_requirement
     REQUIREMENT_CONFLICT(HttpStatus.CONFLICT, "같은 요청이 이미 존재합니다. 다시 시도해 주세요."),
 
+    // stock_lot
+    EXPIRED_ON_ARRIVAL(HttpStatus.BAD_REQUEST, "유효기한이 지난 로트는 입고할 수 없습니다."),
+    RECEIVED_AT_IN_FUTURE(HttpStatus.BAD_REQUEST, "입고 시각은 현재보다 미래일 수 없습니다."),
+    DUPLICATE_LOT(HttpStatus.CONFLICT, "같은 약품에 이미 입고된 로트 번호입니다."),
+
     // server
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다."),
