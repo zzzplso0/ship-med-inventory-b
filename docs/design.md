@@ -290,6 +290,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 ```
 
 - 비밀번호 규칙은 계정 등록에만 적용한다. 첫 관리자 설정값과 로그인 요청에는 적용하지 않는다.
+- `role`과 `shipId` 조합 위반의 `fieldErrors` 키는 `shipMatchingRole`이다. 잘못된 `role` 값은 JSON 변환 실패라 `fieldErrors` 없이 `INVALID_INPUT`으로 응답한다.
 - 비밀번호 규칙은 `@Pattern` 하나로 검증한다. 허용 문자가 ASCII라 20자는 BCrypt 상한인 72바이트를 넘지 않으므로 바이트 길이는 따로 검증하지 않는다.
 
 - GET `/api/users` — 계정 목록 (관리자)
@@ -443,6 +444,13 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
       ORDER BY id ASC
       FOR UPDATE
 
+    # 1-1. 잠금 뒤 멱등성 재확인
+    #    같은 키 요청이 먼저 로트를 잠갔다면 1단계에서 그 커밋을 기다린 상태.
+    #    READ COMMITTED라 새 조회에 먼저 커밋된 기록이 보임. 재확인하지 않으면
+    #    먼저 커밋한 요청이 재고를 소진했을 때 3단계에서 409 {INSUFFICIENT_STOCK}가 나감.
+    IF (현재 사용자.id, idempotency_key) 가 tb_usage_record 에 존재:
+        0단계와 같은 규칙으로 200 또는 409 {IDEMPOTENCY_KEY_REUSED}; 종료
+
     # 2. 잠근 결과를 FEFO 순으로 재정렬 (잠금 순서와 차감 순서는 별개)
     가용로트 = 가용로트.정렬(expiry_date ASC, received_at ASC, id ASC)
 
@@ -466,7 +474,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 
 커밋 → 201 반환
 
-# 6. 같은 키 동시 요청 (0단계를 둘 다 통과한 경우)
+# 6. 같은 키 동시 요청 (0단계와 1-1단계를 둘 다 통과한 경우. 마지막 방어)
 #    두 번째 요청은 5단계 INSERT에서 첫 번째 커밋을 기다린 뒤 uq_usage_idempotency 위반.
 #    PostgreSQL은 이 트랜잭션을 중단시키므로 같은 트랜잭션에서 조회할 수 없음.
 ON uq_usage_idempotency 위반:
@@ -507,7 +515,7 @@ ON uq_usage_idempotency 위반:
 
 - 차감, 복원 대상 로트를 `SELECT ... FOR UPDATE`로 잠근 뒤 트랜잭션 안에서 처리한다.
 - 사용 기록 요청은 `Idempotency-Key`로 식별하고 `UNIQUE(user_id, idempotency_key)`로 재시도 중복 차감을 차단한다.
-- 같은 키 동시 요청으로 UNIQUE 위반이 나면 롤백 후 새 트랜잭션에서 기존 기록을 조회해 반환한다(4.1의 6단계).
+- 같은 키 동시 요청은 로트 잠금 뒤 기존 기록을 다시 확인한다(4.1의 1-1단계). 그래도 UNIQUE 위반이 나면 롤백 후 새 트랜잭션에서 기존 기록을 조회해 반환한다(4.1의 6단계).
 - 계정 등록은 먼저 `loginId` 중복을 확인해 409로 응답한다. 동시 요청이 확인을 함께 통과하면 늦은 쪽의 `uq_user_login` 위반을 같은 409로 변환한다.
     - `saveAndFlush`로 위반을 바로 일으키고, 제약 이름이 `uq_user_login`일 때만 변환한다. 다른 제약 위반은 그대로 던진다.
     - 위반 후 추가 쿼리 없이 예외를 던져 롤백하므로 새 트랜잭션은 필요 없다.
