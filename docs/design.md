@@ -388,6 +388,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 
 - 모든 에러 응답은 `error`(코드 문자열)와 `message`(기본 메시지)를 가진다. 위 엔드포인트의 `{ error:... }` 표기에서 `message`는 생략했다.
 - 추가 정보는 최상위 필드로 응답한다. 검증 실패의 필드별 오류만 요청 필드 이름과 겹치지 않도록 `fieldErrors`로 묶는다.
+- 헤더 제약 위반(`Idempotency-Key` 빈 값·100자 초과)도 `fieldErrors`로 묶고, 키는 헤더 이름이다. 헤더가 아예 없으면 `fieldErrors` 없이 `INVALID_INPUT`으로 응답한다.
 - `fieldErrors`의 타입 변환 실패(`page=abc` 등)에는 내부 타입 정보가 드러나지 않도록 기본 메시지 대신 일반 문구를 넣는다.
 - `error` 값은 `ErrorCode` enum 이름이다. 클라이언트가 분기에 쓰므로 공개한 뒤에는 이름을 바꾸지 않는다.
 - 500 응답에는 예외 메시지나 클래스 이름을 넣지 않고, 원인은 서버 로그에 남긴다.
@@ -428,6 +429,10 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 ```markdown
 함수 사용기록(ship_id, medication_id, user_id, 요청수량 Q, idempotency_key):
 트랜잭션 시작:
+
+    # 시작 전. 약품 존재 확인 (2.2 판정 순서: 404가 409보다 먼저)
+    IF medication_id 가 tb_medication 에 없음:
+        404 {MEDICATION_NOT_FOUND}; 종료
 
     # 0. 멱등성 체크
     IF (현재 사용자.id, idempotency_key) 가 tb_usage_record 에 존재:
