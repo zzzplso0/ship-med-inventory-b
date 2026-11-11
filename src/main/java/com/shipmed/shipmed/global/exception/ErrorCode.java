@@ -31,6 +31,7 @@ public enum ErrorCode {
     // usage
     INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "가용 재고가 부족합니다."),
     IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "같은 Idempotency-Key로 다른 요청을 보낼 수 없습니다."),
+    USAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "사용 기록을 찾을 수 없습니다."),
 
     // server
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),

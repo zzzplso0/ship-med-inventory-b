@@ -76,4 +76,8 @@ public class StockLot extends BaseEntity {
     public void subtractQuantity(int quantity) {
         this.remainingQuantity -= quantity;
     }
+
+    public void addQuantity(int quantity) {
+        this.remainingQuantity += quantity;
+    }
 }
