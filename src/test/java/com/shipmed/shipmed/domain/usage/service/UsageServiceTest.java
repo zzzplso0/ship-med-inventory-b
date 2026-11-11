@@ -9,15 +9,24 @@ import com.shipmed.shipmed.domain.stock.entity.LotStatus;
 import com.shipmed.shipmed.domain.stock.entity.StockLot;
 import com.shipmed.shipmed.domain.stock.repository.StockLotRepository;
 import com.shipmed.shipmed.domain.usage.dto.UsageMapperImpl;
+import com.shipmed.shipmed.domain.usage.dto.request.UsageCancelRequest;
 import com.shipmed.shipmed.domain.usage.dto.request.UsageCreateRequest;
 import com.shipmed.shipmed.domain.usage.dto.response.AllocationDto;
+import com.shipmed.shipmed.domain.usage.dto.response.UsageCancelDto;
 import com.shipmed.shipmed.domain.usage.dto.response.UsageResult;
+import com.shipmed.shipmed.domain.usage.entity.RecordStatus;
+import com.shipmed.shipmed.domain.usage.entity.UsageLotAllocation;
 import com.shipmed.shipmed.domain.usage.entity.UsageRecord;
 import com.shipmed.shipmed.domain.usage.exception.UsageIdempotencyKeyReusedException;
 import com.shipmed.shipmed.domain.usage.exception.UsageInsufficientStockException;
+import com.shipmed.shipmed.domain.usage.exception.UsageNotFoundException;
 import com.shipmed.shipmed.domain.usage.repository.UsageLotAllocationRepository;
 import com.shipmed.shipmed.domain.usage.repository.UsageRecordRepository;
+import com.shipmed.shipmed.domain.user.entity.Role;
+import com.shipmed.shipmed.domain.user.entity.User;
 import com.shipmed.shipmed.domain.user.repository.UserRepository;
+import com.shipmed.shipmed.global.exception.BusinessException;
+import com.shipmed.shipmed.global.exception.ErrorCode;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -77,10 +86,13 @@ class UsageServiceTest {
 
 	@BeforeEach
 	void setUp() {
+		UsageMapperImpl usageMapper = new UsageMapperImpl();
 		UsageProcessor usageProcessor = new UsageProcessor(
 				medicationRepository, stockLotRepository, usageRecordRepository, usageLotAllocationRepository,
-				shipRepository, userRepository, FIXED_CLOCK, new UsageMapperImpl());
-		usageService = new UsageServiceImpl(usageProcessor);
+				shipRepository, userRepository, FIXED_CLOCK, usageMapper);
+		usageService = new UsageServiceImpl(
+				usageProcessor, usageRecordRepository, usageLotAllocationRepository, userRepository,
+				stockLotRepository, FIXED_CLOCK, usageMapper);
 
 		ship = new Ship("선박");
 		ReflectionTestUtils.setField(ship, "id", SHIP_ID);
@@ -244,6 +256,107 @@ class UsageServiceTest {
 		private DataIntegrityViolationException violation(String constraintName) {
 			return new DataIntegrityViolationException(
 					"위반", new ConstraintViolationException("위반", null, constraintName));
+		}
+	}
+
+	@Nested
+	@DisplayName("사용 취소")
+	class Cancel {
+
+		private static final String REASON = "수량 오기입";
+
+		private User officer;
+
+		@BeforeEach
+		void setUpOfficer() {
+			officer = officer(USER_ID);
+		}
+
+		@Test
+		@DisplayName("분배내역대로 원래 로트에 복원하고 기록은 CANCELLED로 남긴다")
+		void givenActiveUsage_whenCancel_thenRestoresLotsAndMarksCancelled() {
+			StockLot lotA = lot(10L, 100, 90);
+			StockLot lotB = lot(11L, 30, 0);
+			UsageRecord usage = usage(officer);
+			givenUsage(usage, new UsageLotAllocation(30, usage, lotB), new UsageLotAllocation(10, usage, lotA));
+			given(userRepository.getReferenceById(USER_ID)).willReturn(officer);
+
+			UsageCancelDto result = cancel();
+
+			assertThat(result.status()).isEqualTo(RecordStatus.CANCELLED);
+			assertThat(result.cancelledBy()).isEqualTo("의무사관1");
+			assertThat(result.restored()).containsExactly(new AllocationDto(11L, 30), new AllocationDto(10L, 10));
+			assertThat(lotB.getRemainingQuantity()).isEqualTo(30);
+			assertThat(lotA.getRemainingQuantity()).isEqualTo(100);
+			verify(stockLotRepository).findAllByIdForUpdate(any());
+		}
+
+		@Test
+		@DisplayName("이미 취소된 기록이면 복원하지 않고 처음 취소한 결과를 돌려준다")
+		void givenCancelledUsage_whenCancel_thenReturnsExistingWithoutRestore() {
+			StockLot lot = lot(10L, 100, 100);
+			UsageRecord usage = usage(officer);
+			usage.cancel(officer, "먼저 취소", NOW);
+			givenUsage(usage, new UsageLotAllocation(40, usage, lot));
+
+			UsageCancelDto result = cancel();
+
+			assertThat(result.status()).isEqualTo(RecordStatus.CANCELLED);
+			assertThat(usage.getCancelReason()).isEqualTo("먼저 취소");
+			assertThat(lot.getRemainingQuantity()).isEqualTo(100);
+			verify(stockLotRepository, never()).findAllByIdForUpdate(any());
+		}
+
+		@Test
+		@DisplayName("남이 기록한 사용이면 ACCESS_DENIED이고 복원·상태 변경은 없다")
+		void givenOthersUsage_whenCancel_thenThrowsAccessDenied() {
+			UsageRecord usage = usage(officer(99L));
+			given(usageRecordRepository.findByIdForUpdate(EXISTING_USAGE_ID)).willReturn(Optional.of(usage));
+
+			assertThatThrownBy(this::cancel)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode").isEqualTo(ErrorCode.ACCESS_DENIED);
+
+			assertThat(usage.getStatus()).isEqualTo(RecordStatus.ACTIVE);
+			verify(stockLotRepository, never()).findAllByIdForUpdate(any());
+		}
+
+		@Test
+		@DisplayName("없는 사용기록이면 USAGE_NOT_FOUND")
+		void givenMissingUsage_whenCancel_thenThrowsNotFound() {
+			given(usageRecordRepository.findByIdForUpdate(EXISTING_USAGE_ID)).willReturn(Optional.empty());
+
+			assertThatThrownBy(this::cancel).isInstanceOf(UsageNotFoundException.class);
+		}
+
+		private UsageCancelDto cancel() {
+			return usageService.cancel(EXISTING_USAGE_ID, USER_ID, new UsageCancelRequest(REASON));
+		}
+
+		private void givenUsage(UsageRecord usage, UsageLotAllocation... allocations) {
+			given(usageRecordRepository.findByIdForUpdate(EXISTING_USAGE_ID)).willReturn(Optional.of(usage));
+			given(usageLotAllocationRepository.findByUsageRecordIdOrderById(EXISTING_USAGE_ID))
+					.willReturn(List.of(allocations));
+		}
+
+		private User officer(Long id) {
+			User user = new User("officer_" + id, "의무사관1", "encoded", Role.MEDICAL_OFFICER, ship);
+			ReflectionTestUtils.setField(user, "id", id);
+			return user;
+		}
+
+		private UsageRecord usage(User recorder) {
+			UsageRecord usageRecord = new UsageRecord(40, KEY, NOW, recorder, ship, medication);
+			ReflectionTestUtils.setField(usageRecord, "id", EXISTING_USAGE_ID);
+			return usageRecord;
+		}
+
+		private StockLot lot(Long id, int initialQuantity, int remainingQuantity) {
+			StockLot lot = new StockLot("L-" + id, initialQuantity, LocalDate.parse("2027-01-31"),
+					Instant.parse("2026-03-01T00:00:00Z"), null, ship, medication);
+			ReflectionTestUtils.setField(lot, "id", id);
+			lot.subtractQuantity(initialQuantity - remainingQuantity);
+			return lot;
 		}
 	}
 }

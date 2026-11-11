@@ -10,6 +10,7 @@ import com.shipmed.shipmed.domain.stock.entity.StockLot;
 import com.shipmed.shipmed.domain.stock.repository.StockLotRepository;
 import com.shipmed.shipmed.domain.usage.dto.request.UsageCreateRequest;
 import com.shipmed.shipmed.domain.usage.dto.response.UsageResult;
+import com.shipmed.shipmed.domain.usage.entity.RecordStatus;
 import com.shipmed.shipmed.domain.usage.exception.UsageInsufficientStockException;
 import com.shipmed.shipmed.domain.usage.repository.UsageLotAllocationRepository;
 import com.shipmed.shipmed.domain.usage.repository.UsageRecordRepository;
@@ -59,6 +60,7 @@ class UsageIntegrationTest {
 
 	private static final String KEY = "key-1";
 	private static final Instant RECEIVED_AT = Instant.parse("2026-03-01T09:00:00Z");
+	private static final String REASON = "수량 오기입";
 
 	@Autowired
 	private WebApplicationContext context;
@@ -216,6 +218,94 @@ class UsageIntegrationTest {
 		assertThat(usageRecordRepository.count()).isEqualTo(1);
 	}
 
+	@Test
+	@DisplayName("취소하면 원래 로트로 복원하고 기록과 분배내역을 남기며, 다시 취소해도 추가 복원은 없다")
+	void givenUsageOverTwoLots_whenCancelTwice_thenRestoresOnce() throws Exception {
+		StockLot lotA = saveLot("A", 100, "2027-01-31");
+		StockLot lotB = saveLot("B", 30, "2026-08-31");
+		Long usageId = use(officer1, KEY, 40);
+
+		mockMvc.perform(cancelRequest(usageId, REASON, officer1))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("CANCELLED"))
+				.andExpect(jsonPath("$.cancelledBy").value("의무사관1"))
+				.andExpect(jsonPath("$.restored.length()").value(2));
+		mockMvc.perform(cancelRequest(usageId, REASON, officer1))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("CANCELLED"));
+
+		assertThat(remaining(lotA)).isEqualTo(100);
+		assertThat(remaining(lotB)).isEqualTo(30);
+		assertThat(usageLotAllocationRepository.count()).isEqualTo(2);
+	}
+
+	@Test
+	@DisplayName("전량 차감한 로트를 취소로 복원하면 그 수량을 다시 사용할 수 있다")
+	void givenFullyUsedLot_whenCancelAndUseAgain_thenUsesRestoredQuantity() throws Exception {
+		StockLot lot = saveLot("A", 100, "2027-01-31");
+		Long usageId = use(officer1, KEY, 100);
+
+		mockMvc.perform(cancelRequest(usageId, REASON, officer1)).andExpect(status().isOk());
+		assertThat(remaining(lot)).isEqualTo(100);
+
+		mockMvc.perform(postRequest("key-2", medication.getId(), 50)).andExpect(status().isCreated());
+		assertThat(remaining(lot)).isEqualTo(50);
+	}
+
+	@Test
+	@DisplayName("취소된 기록의 키로 같은 사용을 다시 보내면 200과 CANCELLED이고 다시 차감하지 않는다")
+	void givenCancelledUsage_whenUseAgainWithSameKey_thenReturnsCancelled() throws Exception {
+		StockLot lot = saveLot("A", 100, "2027-01-31");
+		Long usageId = use(officer1, KEY, 40);
+		mockMvc.perform(cancelRequest(usageId, REASON, officer1)).andExpect(status().isOk());
+
+		mockMvc.perform(postRequest(KEY, medication.getId(), 40))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.usageId").value(usageId))
+				.andExpect(jsonPath("$.status").value("CANCELLED"));
+
+		assertThat(remaining(lot)).isEqualTo(100);
+	}
+
+	@Test
+	@DisplayName("남이 기록한 사용을 취소하면 403이고 잔량과 상태는 그대로다")
+	void givenOthersUsage_whenCancel_thenReturns403() throws Exception {
+		StockLot lot = saveLot("A", 100, "2027-01-31");
+		Long usageId = use(officer1, KEY, 40);
+
+		mockMvc.perform(cancelRequest(usageId, REASON, officer2))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.error").value("ACCESS_DENIED"));
+
+		assertThat(remaining(lot)).isEqualTo(60);
+		assertThat(usageRecordRepository.findById(usageId).orElseThrow().getStatus()).isEqualTo(RecordStatus.ACTIVE);
+	}
+
+	@Test
+	@DisplayName("없는 사용기록을 취소하면 404")
+	void givenMissingUsage_whenCancel_thenReturns404() throws Exception {
+		mockMvc.perform(cancelRequest(Long.MAX_VALUE, REASON, officer1))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.error").value("USAGE_NOT_FOUND"));
+	}
+
+	@Test
+	@DisplayName("취소 사유가 공백이면 대상 확인 전에 400이고 fieldErrors에 reason이 있다")
+	void givenBlankReason_whenCancel_thenReturns400WithFieldErrors() throws Exception {
+		mockMvc.perform(cancelRequest(Long.MAX_VALUE, " ", officer1))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.fieldErrors.reason").exists());
+	}
+
+	@Test
+	@DisplayName("관리자가 취소하면 403")
+	void givenAdmin_whenCancel_thenReturns403() throws Exception {
+		User admin = new User("usage_admin", "관리자", "encoded", Role.ADMIN, null);
+
+		mockMvc.perform(cancelRequest(Long.MAX_VALUE, REASON, admin))
+				.andExpect(status().isForbidden());
+	}
+
 	// 두 작업을 같은 순간에 출발시키고, 각 결과 또는 던진 예외를 모은다.
 	private List<Object> runConcurrently(Callable<UsageResult> first, Callable<UsageResult> second) throws Exception {
 		CountDownLatch start = new CountDownLatch(1);
@@ -255,6 +345,20 @@ class UsageIntegrationTest {
 
 	private UsageCreateRequest request(int quantity) {
 		return new UsageCreateRequest(medication.getId(), quantity);
+	}
+
+	private Long use(User officer, String key, int quantity) {
+		return usageService.create(ship.getId(), officer.getId(), key, request(quantity)).usageDto().usageId();
+	}
+
+	private MockHttpServletRequestBuilder cancelRequest(Long usageId, String reason, User user) {
+		String body = """
+				{"reason":"%s"}
+				""".formatted(reason);
+
+		return post("/api/usages/" + usageId + "/cancellation")
+				.contentType(MediaType.APPLICATION_JSON).content(body)
+				.with(user(CustomUserDetails.from(user)));
 	}
 
 	private MockHttpServletRequestBuilder postRequest(String key, Long medicationId, int quantity) {
