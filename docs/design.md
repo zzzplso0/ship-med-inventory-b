@@ -231,23 +231,25 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 404:
 	ship/medication 없음
 200:
-	동일 Idempotency-Key 재요청 → 기존 201 본문 반환
+	동일 Idempotency-Key 재요청 → 기존 기록을 현재 상태로 반환 (취소됐으면 status:CANCELLED)
 ```
 
 **사용 취소 — `POST /api/usages/{usageId}/cancellation`**
 
 ```
 요청:
-  Body:   { reason }
+  Body:   { reason } // 필수, 최대 255자
 
 200:
-	{ usageId, status:CANCELLED, cancelledAt, cancelledBy, restored:[ {lotId, quantity}, ... ] } // 원래 로트로 복원 내역
+	{ usageId, status:CANCELLED, cancelledAt, cancelledBy, restored:[ {lotId, quantity}, ... ] } // cancelledBy는 취소자 name, restored는 원래 로트로 복원 내역
+400:
+	reason 없음 / 빈 값 / 공백만 / 255자 초과
 401:
 	로그인 안 함
 403:
 	관리자 / 본인이 기록하지 않은 사용
 404:
-	사용기록 없음
+	사용기록 없음 {USAGE_NOT_FOUND}
 200:
 	이미 취소됨 → 멱등(기존 취소 결과 반환)
 ```
