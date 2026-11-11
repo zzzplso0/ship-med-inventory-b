@@ -5,8 +5,6 @@ import com.shipmed.shipmed.domain.ship.entity.Ship;
 import com.shipmed.shipmed.domain.user.entity.Role;
 import com.shipmed.shipmed.domain.user.entity.User;
 import com.shipmed.shipmed.global.security.principal.CustomUserDetails;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,8 +19,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.WebApplicationContext;
 
@@ -41,6 +37,7 @@ class AuthorizationIntegrationTest {
 
 	private static final String VALID_BODY = "{\"quantity\":1}";
 	private static final String INVALID_BODY = "{}";
+	private static final String IDEMPOTENCY_KEY = "Idempotency-Key";
 
 	@Autowired
 	private WebApplicationContext context;
@@ -97,13 +94,14 @@ class AuthorizationIntegrationTest {
 	@Test
 	@DisplayName("다른 선박에 잘못된 본문을 보내면 400이 아니라 403")
 	void givenOtherShipAndInvalidBody_whenPostUsage_thenReturns403() throws Exception {
-		expectAccessDenied(jsonPost("/api/ships/2/usages", INVALID_BODY), officerOfShip1);
+		expectAccessDenied(jsonPost("/api/ships/2/usages", INVALID_BODY).header(IDEMPOTENCY_KEY, "key-1"), officerOfShip1);
 	}
 
 	@Test
 	@DisplayName("자기 선박에 잘못된 본문을 보내면 400")
 	void givenOwnShipAndInvalidBody_whenPostUsage_thenReturns400() throws Exception {
-		mockMvc.perform(jsonPost("/api/ships/1/usages", INVALID_BODY).with(user(officerOfShip1)))
+		// 헤더가 없으면 본문 검증 전에 헤더 누락으로 400이 나므로, 본문 @Valid를 확인하려고 헤더를 넣는다.
+		mockMvc.perform(jsonPost("/api/ships/1/usages", INVALID_BODY).header(IDEMPOTENCY_KEY, "key-1").with(user(officerOfShip1)))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.error").value("INVALID_INPUT"));
 	}
@@ -145,19 +143,12 @@ class AuthorizationIntegrationTest {
 		return CustomUserDetails.from(user);
 	}
 
-	// 선박 API가 아직 없어 인터셉터와 @Valid의 순서를 확인할 수 있는 테스트 전용 컨트롤러.
+	// 재고 현황 API가 아직 없어 선박 조회 권한을 확인할 수 있는 테스트 전용 컨트롤러.
 	@RestController
 	static class TestShipController {
 
 		@GetMapping("/api/ships/{shipId}/inventory")
 		void inventory(@PathVariable Long shipId) {
 		}
-
-		@PostMapping("/api/ships/{shipId}/usages")
-		void usages(@PathVariable Long shipId, @Valid @RequestBody TestRequest request) {
-		}
-	}
-
-	record TestRequest(@NotNull Integer quantity) {
 	}
 }

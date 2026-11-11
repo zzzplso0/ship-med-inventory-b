@@ -72,4 +72,8 @@ public class StockLot extends BaseEntity {
         this.ship = ship;
         this.medication = medication;
     }
+
+    public void subtractQuantity(int quantity) {
+        this.remainingQuantity -= quantity;
+    }
 }
