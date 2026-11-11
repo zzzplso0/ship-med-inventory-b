@@ -62,4 +62,11 @@ public class UsageRecord extends BaseEntity {
         this.ship = ship;
         this.medication = medication;
     }
+
+    public void cancel(User cancelledBy, String reason, Instant cancelledAt) {
+        this.cancelledBy = cancelledBy;
+        this.cancelReason = reason;
+        this.cancelledAt = cancelledAt;
+        this.status = RecordStatus.CANCELLED;
+    }
 }

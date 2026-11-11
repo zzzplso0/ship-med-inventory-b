@@ -31,4 +31,13 @@ public interface StockLotRepository extends JpaRepository<StockLot, Long> {
                                           @Param("medicationId") Long medicationId,
                                           @Param("status") LotStatus status,
                                           @Param("today") LocalDate today);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(value = """
+        SELECT s
+        FROM StockLot s
+        WHERE s.id IN :ids
+        ORDER BY s.id
+    """)
+    List<StockLot> findAllByIdForUpdate(@Param("ids") List<Long> ids);
 }

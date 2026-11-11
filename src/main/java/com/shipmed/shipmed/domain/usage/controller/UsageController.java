@@ -1,6 +1,8 @@
 package com.shipmed.shipmed.domain.usage.controller;
 
+import com.shipmed.shipmed.domain.usage.dto.request.UsageCancelRequest;
 import com.shipmed.shipmed.domain.usage.dto.request.UsageCreateRequest;
+import com.shipmed.shipmed.domain.usage.dto.response.UsageCancelDto;
 import com.shipmed.shipmed.domain.usage.dto.response.UsageDto;
 import com.shipmed.shipmed.domain.usage.dto.response.UsageResult;
 import com.shipmed.shipmed.domain.usage.service.UsageService;
@@ -15,13 +17,13 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RequiredArgsConstructor
-@RequestMapping("/api/ships")
+@RequestMapping("/api")
 @RestController
 public class UsageController {
 
     private final UsageService usageService;
 
-    @PostMapping("/{shipId}/usages")
+    @PostMapping("/ships/{shipId}/usages")
     public ResponseEntity<UsageDto> create(@PathVariable Long shipId,
                                            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 100) String key,
                                            @Valid @RequestBody UsageCreateRequest usageCreateRequest,
@@ -36,5 +38,17 @@ public class UsageController {
         } else {
             return ResponseEntity.ok(result.usageDto());
         }
+    }
+
+    @PostMapping("/usages/{usageId}/cancellation")
+    public ResponseEntity<UsageCancelDto> cancel(@PathVariable Long usageId,
+                                                 @Valid @RequestBody UsageCancelRequest usageCancelRequest,
+                                                 @AuthenticationPrincipal CustomUserDetails customUserDetails)
+    {
+        Long userId = customUserDetails.getUserId();
+
+        UsageCancelDto result = usageService.cancel(usageId, userId, usageCancelRequest);
+
+        return ResponseEntity.ok(result);
     }
 }
