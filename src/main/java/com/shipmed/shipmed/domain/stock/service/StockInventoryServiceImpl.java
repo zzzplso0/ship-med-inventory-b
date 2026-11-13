@@ -9,6 +9,7 @@ import com.shipmed.shipmed.domain.stock.dto.response.StockInventoryRow;
 import com.shipmed.shipmed.domain.stock.repository.StockInventoryQueryMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -27,6 +28,8 @@ public class StockInventoryServiceImpl implements StockInventoryService {
     private final ShipRepository shipRepository;
     private final Clock clock;
 
+    // 두 조회가 같은 스냅샷을 보도록 REPEATABLE READ. READ COMMITTED는 문장마다 스냅샷이 달라 수량이 어긋날 수 있다.
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     @Override
     public List<StockInventoryDto> getInventory(Long shipId) {
         boolean exists = shipRepository.existsById(shipId);
