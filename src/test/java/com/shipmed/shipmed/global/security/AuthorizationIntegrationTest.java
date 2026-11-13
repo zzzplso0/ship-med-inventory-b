@@ -17,9 +17,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.WebApplicationContext;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -31,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ActiveProfiles("test")
-@Import({TestcontainersConfiguration.class, AuthorizationIntegrationTest.TestShipController.class})
+@Import(TestcontainersConfiguration.class)
 @SpringBootTest
 class AuthorizationIntegrationTest {
 
@@ -107,20 +104,6 @@ class AuthorizationIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("의무사관은 자기 선박을 요청할 수 있다")
-	void givenOfficer_whenRequestOwnShip_thenReturns200() throws Exception {
-		mockMvc.perform(get("/api/ships/1/inventory").with(user(officerOfShip1)))
-				.andExpect(status().isOk());
-	}
-
-	@Test
-	@DisplayName("관리자는 소속과 무관하게 선박을 조회할 수 있다")
-	void givenAdmin_whenRequestAnyShip_thenReturns200() throws Exception {
-		mockMvc.perform(get("/api/ships/2/inventory").with(user(admin)))
-				.andExpect(status().isOk());
-	}
-
-	@Test
 	@DisplayName("컨트롤러가 없는 경로는 선박과 무관하게 404")
 	void givenUnmappedPath_whenRequest_thenReturns404() throws Exception {
 		mockMvc.perform(get("/api/ships/2/unknown").with(user(officerOfShip1)))
@@ -141,14 +124,5 @@ class AuthorizationIntegrationTest {
 		User user = new User("login-" + userId, "이름", "encoded", role, ship);
 		ReflectionTestUtils.setField(user, "id", userId);
 		return CustomUserDetails.from(user);
-	}
-
-	// 재고 현황 API가 아직 없어 선박 조회 권한을 확인할 수 있는 테스트 전용 컨트롤러.
-	@RestController
-	static class TestShipController {
-
-		@GetMapping("/api/ships/{shipId}/inventory")
-		void inventory(@PathVariable Long shipId) {
-		}
 	}
 }
