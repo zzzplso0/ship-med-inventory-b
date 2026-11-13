@@ -378,12 +378,15 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 
 조회 대상 약품은 해당 배의 (비치 기준이 있는 약품 ∪ 로트가 있는 약품)이다. 기준만 있고 로트가 없는 약품은 `available:0`, 로트만 있고 기준이 없는 약품은 `requirementSet:false`로 나온다.
 
+약품은 `medicationId` 오름차순, `expiringSoon`은 FEFO(`expiry_date → received_at → id`) 순으로 정렬한다.
+
 ```markdown
 200:
 	[
 	  { medicationId, medicationName, unit, available, requirementSet:true,  minQuantity, shortage, expiringSoon:[ {lotId, quantity, expiryDate} ] },
 	  { medicationId, medicationName, unit, available, requirementSet:false, minQuantity:null, shortage:null, expiringSoon:[...] }  // 기준 없는 약품
 	]
+404: ship 없음 (관리자. 의무사관은 소속 선박 판정에서 403)
 ```
 
 ### 4. 공통 에러 응답
