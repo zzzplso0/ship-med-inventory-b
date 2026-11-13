@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shipmed.shipmed.domain.stock.repository.StockInventoryQueryMapper">
+
+    <!-- 대상 약품 = 비치 기준이 있는 약품 u 로트가 있는 약품. -->
+    <!-- 가용 조건은 LEFT JOIN의 ON에 둔다. WHERE에 두면 가용 로트가 없는 약품 행이 사라진다. -->
+    <!-- 기준이 없으면 min_quantity가 NULL이라 shortage도 NULL이 된다. -->
+    <select id="selectInventory" resultType="com.shipmed.shipmed.domain.stock.dto.response.StockInventoryRow">
+        <![CDATA[
+            WITH target AS (
+                SELECT medication_id FROM tb_stock_requirement WHERE ship_id = #{shipId}
+                UNION
+                SELECT medication_id FROM tb_stock_lot WHERE ship_id = #{shipId}
+            )
+
+            SELECT
+                m.id                                                        AS medication_id,
+                m.name                                                      AS medication_name,
+                m.unit                                                      AS unit,
+                COALESCE(SUM(l.remaining_quantity), 0)::INT                 AS available,
+                (r.id IS NOT NULL)                                          AS requirement_set,
+                r.min_quantity                                              AS min_quantity,
+                COALESCE(SUM(l.remaining_quantity), 0) < r.min_quantity     AS shortage
+            FROM target t
+            JOIN tb_medication m ON m.id = t.medication_id
+            LEFT JOIN tb_stock_requirement r ON r.ship_id = #{shipId}
+                AND r.medication_id = t.medication_id
+            LEFT JOIN tb_stock_lot l ON l.ship_id = #{shipId}
+                AND l.medication_id = t.medication_id
+                AND l.status = 'ACTIVE'
+                AND l.expiry_date >= #{today}
+                AND l.remaining_quantity > 0
+            GROUP BY m.id, m.name, m.unit, r.id, r.min_quantity
+            ORDER BY m.id
+        ]]>
+    </select>
+
+    <!-- 가용 로트 중 today <= expiry_date <= expiringUntil(today + 30일). 약품별로 FEFO 순. -->
+    <select id="selectExpiringSoonLots" resultType="com.shipmed.shipmed.domain.stock.dto.response.StockExpiringLotRow">
+        <![CDATA[
+            SELECT
+                l.medication_id         AS medication_id,
+                l.id                    AS lot_id,
+                l.remaining_quantity    AS quantity,
+                l.expiry_date           AS expiry_date
+            FROM tb_stock_lot l
+            WHERE l.ship_id = #{shipId}
+                AND l.status = 'ACTIVE'
+                AND l.remaining_quantity > 0
+                AND l.expiry_date >= #{today}
+                AND l.expiry_date <= #{expiringUntil}
+            ORDER BY l.medication_id, l.expiry_date, l.received_at, l.id
+        ]]>
+    </select>
+
+</mapper>

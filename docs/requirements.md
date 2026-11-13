@@ -35,9 +35,9 @@
 ## 3. 재고 판정 규칙
 
 - 약품별 가용 재고: 해당 배·해당 약품의 로트 중 `status='ACTIVE' AND expiry_date >= 오늘(UTC) AND remaining_quantity > 0`인 것들의 합.
-- 부족 여부: 가용 재고 < `min_quantity`.
+- 부족 여부: 가용 재고 < `min_quantity`. `min_quantity`가 0이면 항상 부족 아님(`shortage:false`).
 - 만료 여부: `expiry_date < 오늘(UTC)`. 저장하지 않고 조회 시 판정.
-- 유효기한 임박: 가용 로트 중 `expiry_date`가 임박 기준(30일) 이내 인 것.
+- 유효기한 임박: 가용 로트 중 `expiry_date <= 오늘(UTC) + 30일`인 것(양 끝 포함). 오늘이 07-22이면 07-22 ~ 08-21.
 
 ## 4. Edge Case
 
@@ -144,6 +144,10 @@
     - Given: 모르핀 비치 기준 5, 로트 0개.
     - When: 재고 현황 조회.
     - Then: available:0, minQuantity:5, shortage:true. 재고가 0인데도 경고가 뜬다.
+- 유효기한 임박
+    - Given: 로트W(만료 07-21), 로트X(만료 07-22), 로트Y(만료 08-21), 로트Z(만료 08-22). 모두 잔량 10.
+    - When: 재고 현황 조회.
+    - Then: available:30, expiringSoon = [X, Y]. W는 만료라 제외, Z는 임박 기준 밖.
 - 취소분 재사용
     - Given: 로트A 잔량 0 (전량 차감된 상태).
     - When: (a) 취소, (b) 이어서 50정 사용.

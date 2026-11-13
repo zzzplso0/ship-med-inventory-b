@@ -23,3 +23,10 @@ spring:
   flyway:
     locations:
       - classpath:db/migration
+
+mybatis:
+  mapper-locations:
+    - classpath:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true # expiry_date → expiryDate
+    arg-name-based-constructor-auto-mapping: true # record를 생성자 인자 이름으로 매핑.
