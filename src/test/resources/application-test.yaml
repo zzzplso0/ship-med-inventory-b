@@ -6,3 +6,9 @@ spring:
 logging:
   level:
     org.hibernate.SQL: debug
+
+shipmed:
+  initial-admin:
+    login-id: test
+    name: test
+    password: test
