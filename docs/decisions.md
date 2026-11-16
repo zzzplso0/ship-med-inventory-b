@@ -284,7 +284,8 @@
 - 대안: 가비아 등 정식 등록대행자에서 구매. 레코드를 제약 없이 다룰 수 있지만 비용이 들고, 이번 운영 기간에는 kro.kr로 충분함.
 - 80 리스너는 열어 두고 규칙 액션을 Redirection(HTTPS 443, 301)으로 둠. 주소를 `http://`로 입력해도 HTTPS로 넘어가고, 평문 요청은 앱까지 가지 않음.
 - DNS는 내도메인.한국에서 관리. NCP Global DNS로 네임서버를 넘기지 않음(레코드가 2개뿐이라 넘길 이유가 없음).
-- 앱은 `server.forward-headers-strategy: framework`로 로드밸런서가 붙인 `X-Forwarded-*`를 읽어 원래 요청이 HTTPS임을 알고, 세션 쿠키에 `Secure`를 붙임. 이 헤더는 위조될 수 있으나, 앱 서버가 private 서브넷에 있고 로드밸런서에서 오는 요청만 받으므로(부차 19번) 로드밸런서만 붙일 수 있음.
+- 세션 쿠키의 `Secure`는 prod에서 `server.servlet.session.cookie.secure: true`로 항상 붙임. 배포 환경에서 확인해 보니 `forward-headers-strategy: framework`만으로는 붙지 않았음. 세션 쿠키는 Spring 필터보다 아래인 Tomcat이 만들기 때문에, 필터 단계에서 바꾼 HTTPS 정보가 반영되지 않는 것으로 봄.
+- `forward-headers-strategy: framework`는 남겨 둠. 앱이 원래 요청의 스킴과 호스트를 알아야 하는 경우(리다이렉트 주소 등)에 씀. 이 헤더는 위조될 수 있으나, 앱 서버가 private 서브넷에 있고 로드밸런서에서 오는 요청만 받으므로(부차 19번) 로드밸런서만 붙일 수 있음.
 
 ### 21. 설정값은 앱 서버의 env 파일에 두고, 컨테이너는 `--env-file`로 읽음.
 
