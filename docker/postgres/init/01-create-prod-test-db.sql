@@ -1,0 +1,1 @@
+CREATE DATABASE shipmed_prod_test;

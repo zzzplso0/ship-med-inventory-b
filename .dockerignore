@@ -11,9 +11,7 @@ build/
 Dockerfile
 .dockerignore
 
-.env
-.logs/
+*.env
 out/
-uploads/
 
 src/main/generated

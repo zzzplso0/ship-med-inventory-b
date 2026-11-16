@@ -30,3 +30,15 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true # expiry_date → expiryDate
     arg-name-based-constructor-auto-mapping: true # record를 생성자 인자 이름으로 매핑.
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never

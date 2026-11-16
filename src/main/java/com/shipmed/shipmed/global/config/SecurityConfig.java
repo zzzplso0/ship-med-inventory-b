@@ -25,7 +25,11 @@ public class SecurityConfig {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
+                    // 로그인.
                     .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+
+                    // actuator.
+                    .requestMatchers("/actuator/health/**").permitAll()
 
                     // 관리자.
                     .requestMatchers(HttpMethod.POST, "/api/users").hasRole("ADMIN")

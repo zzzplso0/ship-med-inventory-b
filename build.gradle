@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.shipmed'
-version = '0.0.1-SNAPSHOT'
+version = '0.1.7'
 
 java {
 	toolchain {
@@ -22,6 +22,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+	// Actuator
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
 	// DB
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -56,4 +59,8 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+jar {
+	enabled = false
 }
