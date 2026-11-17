@@ -149,7 +149,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
     - 로그아웃: 기본 `LogoutFilter`를 끄고 컨트롤러에서 세션을 무효화.
 - 세션의 principal(`CustomUserDetails`)에는 엔티티 대신 `userId`, `loginId`, `role`, `shipId` 값만 담음.
 - 비밀번호는 해시로 저장. 인증이 끝나면 principal의 해시를 지워 세션에 남기지 않음.
-- CSRF: MVP는 화면 없이 API만 제공하므로 CSRF 보호를 끄고, 세션 쿠키는 `HttpOnly`, `SameSite=Lax`로 발급. 화면(Thymeleaf) 단계에서 CSRF 보호를 켬.
+- CSRF: 화면 경로에만 켜고 `/api/**`는 끔. 세션 쿠키는 `HttpOnly`, `SameSite=Lax`로 발급. 화면의 보안 설정은 6.2.
 
 ### 2. 권한 판정 순서
 
@@ -160,7 +160,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 - 판정 위치:
     - 로그인, 역할: 보안 필터(`authorizeHttpRequests`).
     - 소속 선박: `ShipAccessInterceptor`(`HandlerInterceptor`의 `preHandle`). `@Valid`는 컨트롤러 인자를 만들 때 실행되므로 서비스나 `@PreAuthorize`에서 판정하면 400이 403보다 먼저 나감.
-        - `/api/ships/{shipId}/**` 중 컨트롤러에 매핑된 요청만 판정하며, 없는 경로는 404. 인터셉터가 경로 변수 이름으로 값을 읽으므로 선박 API의 경로 변수는 `shipId`로 통일.
+        - `/api/ships/{shipId}/**`와 화면의 `/ships/{shipId}/**` 중 컨트롤러에 매핑된 요청만 판정하며, 없는 경로는 404. 인터셉터가 경로 변수 이름으로 값을 읽으므로 선박 API와 화면의 경로 변수는 `shipId`로 통일.
     - 형식 검증: 컨트롤러의 `@Valid` 등. 필수값 누락, 길이 초과, 비밀번호 규칙, 계정의 역할과 `shipId` 조합, 수량 0/음수, 잘못된 JSON, `Idempotency-Key` 형식, `page`·`size` 범위.
     - 대상 존재, 규칙 검증, 비즈니스 규칙: 서비스. 규칙 검증은 `EXPIRED_ON_ARRIVAL`, `RECEIVED_AT_IN_FUTURE`처럼 `Clock`이나 도메인 규칙이 필요한 것.
 
@@ -530,3 +530,59 @@ ON uq_usage_idempotency 위반:
     - `saveAndFlush`로 위반을 바로 일으키고, 제약 이름이 `uq_user_login`일 때만 변환한다. 다른 제약 위반은 그대로 던진다.
     - 위반 후 추가 쿼리 없이 예외를 던져 롤백하므로 새 트랜잭션은 필요 없다.
 - 비치 기준은 기존 행이 있으면 수정하고, 없으면 `saveAndFlush`로 저장한다. 신규 요청이 겹쳐 `uq_requirement` 위반이 나면 409 `REQUIREMENT_CONFLICT`로 변환하고 롤백한다. 다른 제약 위반은 그대로 던진다.
+
+---
+
+## 6. 화면
+
+- 화면 범위와 동작 기준은 `requirements.md` 6장.
+- Thymeleaf로 서버에서 HTML을 그리고, 입력은 폼 POST로 받는다. 화면 컨트롤러(`@Controller`)는 API 컨트롤러와 같은 서비스를 호출하고 비즈니스 로직을 두지 않는다.
+
+### 1. 화면 경로
+
+- 화면 경로는 API 경로에서 `/api`를 뺀 구조를 따른다. 목록 화면에 등록 폼을 함께 둔다.
+
+| 메서드   | 경로                             | 화면                        | 권한                                    |
+|----------|----------------------------------|-----------------------------|-----------------------------------------|
+| GET/POST | `/login`                         | 로그인                      | 누구나                                  |
+| POST     | `/logout`                        | 로그아웃                    | 로그인                                  |
+| GET      | `/`                              | 역할별 첫 화면으로 redirect | 로그인                                  |
+| GET/POST | `/users`                         | 계정 목록·등록              | 관리자                                  |
+| GET/POST | `/ships`                         | 선박 목록·등록              | 목록 로그인, 등록 관리자                |
+| GET/POST | `/medications`                   | 약품 목록·등록              | 목록 로그인, 등록 관리자                |
+| GET/POST | `/ships/{shipId}/requirements`   | 비치 기준 목록·설정         | 목록 관리자·의무사관(소속), 설정 관리자 |
+| GET/POST | `/ships/{shipId}/lots`           | 입고                        | 의무사관                                |
+| GET/POST | `/ships/{shipId}/usages`         | 사용                        | 의무사관                                |
+| GET      | `/ships/{shipId}/usages/result`  | 사용 결과(취소 폼)          | 의무사관                                |
+| POST     | `/usages/{usageId}/cancellation` | 사용 취소                   | 의무사관                                |
+| GET      | `/ships/{shipId}/inventory`      | 재고 현황                   | 관리자, 의무사관(소속 선박)             |
+
+- 목록 화면의 `page`, `size`는 API와 같이 `PageQuery`로 받는다.
+- 비치 기준 설정은 API의 PUT 대신 폼 POST로 받고, `medicationId`는 폼 값으로 보낸다.
+
+### 2. 보안
+
+- 필터 체인은 하나로 두고, 요청이 `/api/**`인지로 나눈다.
+
+| 항목      | `/api/**`                                  | 화면                                        |
+|-----------|--------------------------------------------|---------------------------------------------|
+| CSRF      | 끔                                         | 켬. `th:action` 폼에 토큰이 자동으로 들어감 |
+| 미로그인  | 401 JSON(`CustomAuthenticationEntryPoint`) | `/login`으로 redirect                       |
+| 역할 위반 | 403 JSON(`CustomAccessDeniedHandler`)      | 403 오류 화면                               |
+
+- 로그인은 API 로그인과 같은 방식(1장 `AuthenticationManager`, 세션 ID 교체, `SecurityContext` 저장)을 화면 컨트롤러에서도 쓴다. 실패하면 로그인 화면에 메시지를 보여 준다. 세션은 화면과 API가 함께 쓴다.
+- 로그아웃은 CSRF 토큰이 있는 POST로만 받는다.
+
+### 3. 오류 처리
+
+- `GlobalExceptionHandler`는 API 컨트롤러(`@RestController`)에만 적용하고, 화면 컨트롤러의 예외는 화면용 `@ControllerAdvice`가 처리한다. 인터셉터가 던진 소속 선박 403도 대상 핸들러에 따라 둘 중 하나로 간다.
+- 형식 검증(400): `@Valid`와 `BindingResult`로 필드 옆에 메시지를 보여 주고 입력값을 유지한다.
+- 규칙 검증(400)과 비즈니스 충돌(409): 컨트롤러가 `BusinessException`을 받아 같은 입력 화면에 `ErrorCode` 메시지를 보여 준다. 재고 부족은 가용 수량을 함께 보여 준다.
+- 403, 404, 500: 오류 화면. 500 화면에 예외 정보를 넣지 않는다.
+
+### 4. 제출 처리
+
+- 성공한 POST는 redirect한다(Post-Redirect-Get). 등록은 목록으로, 입고는 재고 현황으로 이동한다.
+- 사용 폼은 화면을 그릴 때 UUID를 만들어 `Idempotency-Key` hidden 값으로 넣는다. 같은 폼을 두 번 제출하면 같은 키라 4.1의 멱등 처리로 한 번만 차감된다.
+- 사용 결과(`usageId`, 분배 내역)는 flash attribute로 결과 화면에 넘기고, 결과 화면은 취소 폼(`reason`)을 보여 준다. 새로고침해서 flash 값이 없으면 사용 화면으로 redirect한다. 사용 기록을 다시 조회하는 API는 만들지 않는다.
+- 취소에 성공하면 복원 내역을 flash attribute로 넘기고 재고 현황으로 redirect한다.
