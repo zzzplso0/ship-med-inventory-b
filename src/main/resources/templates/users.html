@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('계정')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+<main>
+    <h1>계정</h1>
+    <p class="message" th:if="${message}" th:text="${message}"></p>
+
+    <h2>계정 등록</h2>
+    <p class="error" th:if="${errorMessage}" th:text="${errorMessage}"></p>
+    <form th:action="@{/users}" method="post">
+        <p>
+            <label for="loginId">로그인 ID</label>
+            <input type="text" id="loginId" name="loginId" th:value="${form?.loginId}" maxlength="30" required>
+            <span class="error" th:if="${fieldErrors?.get('loginId')}" th:text="${fieldErrors.get('loginId')}"></span>
+        </p>
+        <p>
+            <label for="name">이름</label>
+            <input type="text" id="name" name="name" th:value="${form?.name}" maxlength="30" required>
+            <span class="error" th:if="${fieldErrors?.get('name')}" th:text="${fieldErrors.get('name')}"></span>
+        </p>
+        <p>
+            <label for="password">비밀번호</label>
+            <input type="password" id="password" name="password" maxlength="20" required>
+            <span class="error" th:if="${fieldErrors?.get('password')}" th:text="${fieldErrors.get('password')}"></span>
+        </p>
+        <p>
+            <label for="role">역할</label>
+            <select id="role" name="role">
+                <option value="MEDICAL_OFFICER" th:selected="${form?.role?.name() == 'MEDICAL_OFFICER'}">의무사관</option>
+                <option value="ADMIN" th:selected="${form?.role?.name() == 'ADMIN'}">관리자</option>
+            </select>
+            <span class="error" th:if="${fieldErrors?.get('role')}" th:text="${fieldErrors.get('role')}"></span>
+        </p>
+        <p>
+            <label for="shipId">소속 선박 ID</label>
+            <input type="number" id="shipId" name="shipId" th:value="${form?.shipId}" min="1">
+            <small>의무사관만 입력. <a th:href="@{/ships}">선박 목록</a>에서 ID 확인</small>
+            <span class="error" th:if="${fieldErrors?.get('shipId')}" th:text="${fieldErrors.get('shipId')}"></span>
+            <span class="error" th:if="${fieldErrors?.get('shipMatchingRole')}" th:text="${fieldErrors.get('shipMatchingRole')}"></span>
+        </p>
+        <button type="submit">등록</button>
+    </form>
+
+    <h2>계정 목록</h2>
+    <p th:text="|총 ${users.totalElements}명|"></p>
+    <table>
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>로그인 ID</th>
+            <th>이름</th>
+            <th>역할</th>
+            <th>소속 선박 ID</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="user : ${users.content}">
+            <td th:text="${user.id}"></td>
+            <td th:text="${user.loginId}"></td>
+            <td th:text="${user.name}"></td>
+            <td th:text="${user.role.name() == 'ADMIN'} ? '관리자' : '의무사관'"></td>
+            <td th:text="${user.shipId} ?: '-'"></td>
+        </tr>
+        <tr th:if="${users.content.isEmpty()}">
+            <td colspan="5">계정이 없습니다.</td>
+        </tr>
+        </tbody>
+    </table>
+    <nav th:replace="~{fragments/layout :: pagination(${users}, '/users')}"></nav>
+</main>
+</body>
+</html>
