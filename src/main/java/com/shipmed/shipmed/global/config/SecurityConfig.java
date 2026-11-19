@@ -13,18 +13,31 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandlerImpl;
+import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.AnyRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 @EnableWebSecurity
 @Configuration
 public class SecurityConfig {
+
+    private static final RequestMatcher API = PathPatternRequestMatcher.withDefaults().matcher("/api/**");
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    AuthenticationEntryPoint entryPoint,
                                                    CustomAccessDeniedHandler customAccessDeniedHandler) throws Exception {
         http
-            .csrf(AbstractHttpConfigurer::disable)
+            .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
             .authorizeHttpRequests(auth -> auth
+                    // Controller
+                    .requestMatchers(HttpMethod.GET, "/login").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/login").permitAll()
+                    .requestMatchers("/error").permitAll()
+
+                    /* RestController */
                     // 로그인.
                     .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
 
@@ -46,10 +59,13 @@ public class SecurityConfig {
                     // 그 외 조회와 로그아웃.
                     .anyRequest().authenticated())
 
-            // 미로그인 처리.
+            // 미로그인·권한 없음 처리. /api는 JSON, 화면은 로그인 화면 이동·오류 화면.
             .exceptionHandling(e -> e
-                    .authenticationEntryPoint(entryPoint)
-                    .accessDeniedHandler(customAccessDeniedHandler)
+                    .defaultAuthenticationEntryPointFor(entryPoint, API)
+                    .defaultAuthenticationEntryPointFor(new LoginUrlAuthenticationEntryPoint("/login"), AnyRequestMatcher.INSTANCE)
+
+                    .defaultAccessDeniedHandlerFor(customAccessDeniedHandler, API)
+                    .defaultAccessDeniedHandlerFor(new AccessDeniedHandlerImpl(), AnyRequestMatcher.INSTANCE)
             )
 
             // 로그아웃은 controller에서 처리.
