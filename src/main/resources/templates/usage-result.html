@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('사용 결과')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+<main th:with="id=${usage != null} ? ${usage.usageId} : ${usageId}">
+    <h1 th:text="|사용 #${id}|">사용 결과</h1>
+
+    <th:block th:if="${usage}">
+        <p class="message" th:if="${repeated}">같은 요청이 이미 처리되어 기존 결과를 보여 줍니다.</p>
+        <table>
+            <tbody>
+            <tr><th>약품 ID</th><td th:text="${medicationId}"></td></tr>
+            <tr><th>수량</th><td th:text="${usage.quantity}"></td></tr>
+            <tr><th>상태</th><td th:text="${usage.status.name() == 'ACTIVE'} ? '정상' : '취소됨'"></td></tr>
+            <tr><th>사용 시각(UTC)</th><td th:text="${usage.usedAt}"></td></tr>
+            </tbody>
+        </table>
+
+        <h2>차감한 로트</h2>
+        <table>
+            <thead>
+            <tr><th>로트 ID</th><th>수량</th></tr>
+            </thead>
+            <tbody>
+            <tr th:each="allocation : ${usage.allocations}">
+                <td th:text="${allocation.lotId}"></td>
+                <td th:text="${allocation.quantity}"></td>
+            </tr>
+            </tbody>
+        </table>
+    </th:block>
+
+    <section th:if="${usage == null or usage.status.name() == 'ACTIVE'}">
+        <h2>잘못 기록했다면 취소</h2>
+        <p>이 화면을 떠나면 화면에서 취소할 수 없습니다.</p>
+        <form th:action="@{/usages/{id}/cancellation(id=${id})}" method="post">
+            <p>
+                <label for="reason">취소 사유</label>
+                <input type="text" id="reason" name="reason" maxlength="255" required>
+                <span class="error" th:if="${fieldErrors?.get('reason')}" th:text="${fieldErrors.get('reason')}"></span>
+            </p>
+            <button type="submit">취소</button>
+        </form>
+    </section>
+
+    <p><a th:href="@{/ships/{id}/usages(id=${shipId})}">다른 사용 기록</a></p>
+</main>
+</body>
+</html>

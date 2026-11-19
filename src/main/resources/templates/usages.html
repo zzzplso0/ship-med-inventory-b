@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('사용')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+<main>
+    <h1>사용</h1>
+
+    <div class="message" th:if="${cancelled}">
+        <p th:text="|사용 #${cancelled.usageId}을(를) 취소했습니다. 원래 로트로 복원했습니다.|"></p>
+        <ul>
+            <li th:each="allocation : ${cancelled.restored}"
+                th:text="|로트 ${allocation.lotId}: ${allocation.quantity}|"></li>
+        </ul>
+    </div>
+    <p class="error" th:if="${errorMessage}" th:text="${errorMessage}"></p>
+
+    <p>유효기한이 빠른 로트부터 차감합니다.</p>
+    <form th:action="@{/ships/{id}/usages(id=${shipId})}" method="post">
+        <input type="hidden" name="idempotencyKey" th:value="${idempotencyKey}">
+        <p>
+            <label for="medicationId">약품 ID</label>
+            <input type="number" id="medicationId" name="medicationId" th:value="${form?.medicationId}" min="1" required>
+            <small><a th:href="@{/medications}">약품 목록</a>에서 ID 확인</small>
+            <span class="error" th:if="${fieldErrors?.get('medicationId')}" th:text="${fieldErrors.get('medicationId')}"></span>
+        </p>
+        <p>
+            <label for="quantity">수량</label>
+            <input type="number" id="quantity" name="quantity" th:value="${form?.quantity}" min="1" required>
+            <span class="error" th:if="${fieldErrors?.get('quantity')}" th:text="${fieldErrors.get('quantity')}"></span>
+        </p>
+        <button type="submit">사용 기록</button>
+    </form>
+</main>
+</body>
+</html>
