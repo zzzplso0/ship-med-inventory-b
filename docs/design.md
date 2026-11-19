@@ -575,7 +575,9 @@ ON uq_usage_idempotency 위반:
 
 ### 3. 오류 처리
 
-- `GlobalExceptionHandler`는 API 컨트롤러(`@RestController`)에만 적용하고, 화면 컨트롤러의 예외는 화면용 `@ControllerAdvice`가 처리한다. 인터셉터가 던진 소속 선박 403도 대상 핸들러에 따라 둘 중 하나로 간다.
+- 화면 컨트롤러는 한 패키지에 두고, 화면용 `@ControllerAdvice`는 `basePackages`로 그 패키지에만 적용하며 `@Order`로 `GlobalExceptionHandler`보다 먼저 둔다. `GlobalExceptionHandler`는 바꾸지 않는다. 인터셉터가 던진 소속 선박 403도 대상 핸들러에 따라 둘 중 하나로 간다.
+    - `GlobalExceptionHandler`의 적용 대상을 `@RestController`로 좁히지 않는다. 없는 경로의 `NoResourceFoundException`은 컨트롤러 밖에서 나므로, 좁히면 `/api`의 404 `RESOURCE_NOT_FOUND` 응답이 사라진다.
+    - 같은 이유로 화면의 없는 경로(예: `/foo`)는 JSON 404로 응답한다. 화면의 메뉴와 redirect는 없는 경로로 보내지 않으므로 주소를 직접 입력할 때만 생긴다.
 - 형식 검증(400): `@Valid`와 `BindingResult`로 필드 옆에 메시지를 보여 주고 입력값을 유지한다.
 - 규칙 검증(400)과 비즈니스 충돌(409): 컨트롤러가 `BusinessException`을 받아 같은 입력 화면에 `ErrorCode` 메시지를 보여 준다. 재고 부족은 가용 수량을 함께 보여 준다.
 - 403, 404, 500: 오류 화면. 500 화면에 예외 정보를 넣지 않는다.
