@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/layout :: head('재고 현황')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+<main>
+    <h1 th:text="|선박 ${shipId} 재고 현황|">재고 현황</h1>
+
+    <form sec:authorize="hasRole('ADMIN')" th:action="@{/inventory}" method="get">
+        <label for="shipId">다른 선박</label>
+        <input type="number" id="shipId" name="shipId" min="1" required placeholder="선박 ID">
+        <button type="submit">보기</button>
+        <small><a th:href="@{/ships}">선박 목록</a>에서 ID 확인</small>
+    </form>
+
+    <p>
+        <span th:class="${shortageCount > 0} ? 'error'" th:text="|부족 ${shortageCount}개|"></span>,
+        <span th:text="|유효기한 임박(30일 이내) ${expiringCount}개|"></span>
+    </p>
+    <p><small>가용 재고는 유효기한이 지나지 않은 정상 로트의 잔량 합입니다. 비치 기준이 없는 약품은 부족 여부를 판정하지 않습니다.</small></p>
+
+    <table>
+        <thead>
+        <tr>
+            <th>약품 ID</th>
+            <th>약품</th>
+            <th>가용 재고</th>
+            <th>최소 수량</th>
+            <th>상태</th>
+            <th>임박 로트(로트 ID: 수량, 유효기한)</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="item : ${items}">
+            <td th:text="${item.medicationId}"></td>
+            <td th:text="${item.medicationName}"></td>
+            <td th:text="|${item.available} ${item.unit}|"></td>
+            <td th:text="${item.requirementSet} ? ${item.minQuantity} : '기준 없음'"></td>
+            <td th:switch="${item.shortage}">
+                <span th:case="true" class="error">부족</span>
+                <span th:case="false">정상</span>
+                <span th:case="*">-</span>
+            </td>
+            <td>
+                <span th:if="${item.expiringSoon.isEmpty()}">-</span>
+                <ul th:unless="${item.expiringSoon.isEmpty()}">
+                    <li th:each="lot : ${item.expiringSoon}" th:text="|${lot.lotId}: ${lot.quantity}, ${lot.expiryDate}|"></li>
+                </ul>
+            </td>
+        </tr>
+        <tr th:if="${items.isEmpty()}">
+            <td colspan="6">비치 기준이나 입고된 약품이 없습니다.</td>
+        </tr>
+        </tbody>
+    </table>
+</main>
+</body>
+</html>
