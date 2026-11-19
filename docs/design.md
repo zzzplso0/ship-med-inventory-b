@@ -587,7 +587,9 @@ ON uq_usage_idempotency 위반:
 
 ### 4. 제출 처리
 
-- 성공한 POST는 redirect한다(Post-Redirect-Get). 등록은 목록으로, 입고는 재고 현황으로 이동한다.
+- 성공한 POST는 redirect한다(Post-Redirect-Get). 등록은 목록으로, 입고는 연속 입력을 위해 입고 화면으로 돌아와 완료 메시지를 보여 준다.
 - 사용 폼은 화면을 그릴 때 UUID를 만들어 `Idempotency-Key` hidden 값으로 넣는다. 같은 폼을 두 번 제출하면 같은 키라 4.1의 멱등 처리로 한 번만 차감된다.
 - 사용 결과(`usageId`, 분배 내역)는 flash attribute로 결과 화면에 넘기고, 결과 화면은 취소 폼(`reason`)을 보여 준다. 새로고침해서 flash 값이 없으면 사용 화면으로 redirect한다. 사용 기록을 다시 조회하는 API는 만들지 않는다.
-- 취소에 성공하면 복원 내역을 flash attribute로 넘기고 재고 현황으로 redirect한다.
+- 취소에 성공하면 복원 내역을 flash attribute로 넘기고 사용 화면으로 redirect한다. 취소 사유 검증에 실패하면 결과 데이터 없이 취소 폼만 다시 보여 준다.
+- 입고 폼의 유효기한은 `date`, 입고 시각은 `datetime-local` 입력(분 단위)으로 받고 입고 시각은 UTC로 본다. 기본값은 주입한 `Clock`의 현재 시각.
+- 사용 폼은 오류로 다시 그릴 때도 새 `Idempotency-Key`를 만든다. 오류면 기록이 생기지 않았으므로 안전하다.

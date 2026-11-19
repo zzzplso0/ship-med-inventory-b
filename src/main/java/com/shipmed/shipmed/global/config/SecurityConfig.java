@@ -43,6 +43,11 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/medications").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ships/*/requirements").hasRole("ADMIN")
 
+                    // 의무사관 화면.
+                    .requestMatchers("/ships/*/lots").hasRole("MEDICAL_OFFICER")
+                    .requestMatchers("/ships/*/usages/**").hasRole("MEDICAL_OFFICER")
+                    .requestMatchers(HttpMethod.POST, "/usages/*/cancellation").hasRole("MEDICAL_OFFICER")
+
                     /* RestController */
                     // 로그인.
                     .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
