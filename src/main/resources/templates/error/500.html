@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('오류가 발생했습니다')}"></head>
+<body>
+<main>
+    <h1>오류가 발생했습니다</h1>
+    <p>잠시 후 다시 시도해 주세요.</p>
+    <p><a th:href="@{/}">첫 화면으로</a></p>
+</main>
+</body>
+</html>

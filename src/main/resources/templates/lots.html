@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('입고')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+<main>
+    <h1>입고</h1>
+    <p class="message" th:if="${message}" th:text="${message}"></p>
+    <p class="error" th:if="${errorMessage}" th:text="${errorMessage}"></p>
+
+    <form th:action="@{/ships/{id}/lots(id=${shipId})}" method="post">
+        <p>
+            <label for="medicationId">약품 ID</label>
+            <input type="number" id="medicationId" name="medicationId" th:value="${form?.medicationId}" min="1" required>
+            <small><a th:href="@{/medications}">약품 목록</a>에서 ID 확인</small>
+            <span class="error" th:if="${fieldErrors?.get('medicationId')}" th:text="${fieldErrors.get('medicationId')}"></span>
+        </p>
+        <p>
+            <label for="lotNumber">로트 번호</label>
+            <input type="text" id="lotNumber" name="lotNumber" th:value="${form?.lotNumber}" maxlength="50" required>
+            <span class="error" th:if="${fieldErrors?.get('lotNumber')}" th:text="${fieldErrors.get('lotNumber')}"></span>
+        </p>
+        <p>
+            <label for="quantity">수량</label>
+            <input type="number" id="quantity" name="quantity" th:value="${form?.quantity}" min="1" required>
+            <span class="error" th:if="${fieldErrors?.get('quantity')}" th:text="${fieldErrors.get('quantity')}"></span>
+        </p>
+        <p>
+            <label for="expiryDate">유효기한</label>
+            <input type="date" id="expiryDate" name="expiryDate" th:value="${form?.expiryDate}" required>
+            <span class="error" th:if="${fieldErrors?.get('expiryDate')}" th:text="${fieldErrors.get('expiryDate')}"></span>
+        </p>
+        <p>
+            <label for="receivedAt">입고 시각(UTC)</label>
+            <input type="datetime-local" id="receivedAt" name="receivedAt"
+                   th:value="${form?.receivedAt != null} ? ${#temporals.format(form.receivedAt, 'yyyy-MM-dd''T''HH:mm')} : ${defaultReceivedAt}" required>
+            <span class="error" th:if="${fieldErrors?.get('receivedAt')}" th:text="${fieldErrors.get('receivedAt')}"></span>
+        </p>
+        <button type="submit">입고</button>
+    </form>
+</main>
+</body>
+</html>
