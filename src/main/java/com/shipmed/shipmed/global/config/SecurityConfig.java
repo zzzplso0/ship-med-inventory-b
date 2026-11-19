@@ -37,6 +37,12 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/login").permitAll()
                     .requestMatchers("/error").permitAll()
 
+                    // 관리자 화면.
+                    .requestMatchers("/users").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/ships").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/medications").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/ships/*/requirements").hasRole("ADMIN")
+
                     /* RestController */
                     // 로그인.
                     .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()

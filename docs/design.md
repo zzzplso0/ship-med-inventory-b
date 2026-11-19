@@ -559,6 +559,9 @@ ON uq_usage_idempotency 위반:
 
 - 목록 화면의 `page`, `size`는 API와 같이 `PageQuery`로 받는다.
 - 비치 기준 설정은 API의 PUT 대신 폼 POST로 받고, `medicationId`는 폼 값으로 보낸다.
+- 계정의 소속 선박과 비치 기준의 약품은 ID를 숫자로 입력한다. 선택 목록은 페이지 크기(최대 100) 때문에 전체를 담지 못한다.
+- 약품 등록 폼은 `StringTrimmerEditor(true)`로 앞뒤 공백을 지우고 빈 값을 `null`로 받는다. 비밀번호가 있는 계정 폼에는 적용하지 않는다.
+- 폼 DTO가 record라 `th:field`, `th:errors` 대신 필드 이름 → 메시지 Map(`fieldErrors`)을 화면에 넘긴다.
 
 ### 2. 보안
 

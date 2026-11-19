@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/layout :: head('비치 기준')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+<main>
+    <h1 th:text="|선박 ${shipId} 비치 기준|">비치 기준</h1>
+    <p class="message" th:if="${message}" th:text="${message}"></p>
+
+    <section sec:authorize="hasRole('ADMIN')">
+        <h2>비치 기준 설정</h2>
+        <p>이미 기준이 있는 약품이면 최소 수량을 수정합니다.</p>
+        <p class="error" th:if="${errorMessage}" th:text="${errorMessage}"></p>
+        <form th:action="@{/ships/{id}/requirements(id=${shipId})}" method="post">
+            <p>
+                <label for="medicationId">약품 ID</label>
+                <input type="number" id="medicationId" name="medicationId" th:value="${form?.medicationId}" min="1" required>
+                <small><a th:href="@{/medications}">약품 목록</a>에서 ID 확인</small>
+                <span class="error" th:if="${fieldErrors?.get('medicationId')}" th:text="${fieldErrors.get('medicationId')}"></span>
+            </p>
+            <p>
+                <label for="minQuantity">최소 수량</label>
+                <input type="number" id="minQuantity" name="minQuantity" th:value="${form?.minQuantity}" min="0" required>
+                <span class="error" th:if="${fieldErrors?.get('minQuantity')}" th:text="${fieldErrors.get('minQuantity')}"></span>
+            </p>
+            <button type="submit">설정</button>
+        </form>
+    </section>
+
+    <h2>비치 기준 목록</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>약품 ID</th>
+            <th>약품</th>
+            <th>최소 수량</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="requirement : ${requirements.content}">
+            <td th:text="${requirement.medicationId}"></td>
+            <td th:text="${requirement.medicationName}"></td>
+            <td th:text="${requirement.minQuantity}"></td>
+        </tr>
+        <tr th:if="${requirements.content.isEmpty()}">
+            <td colspan="3">비치 기준이 없습니다.</td>
+        </tr>
+        </tbody>
+    </table>
+    <nav th:replace="~{fragments/layout :: pagination(${requirements}, ${'/ships/' + shipId + '/requirements'})}"></nav>
+</main>
+</body>
+</html>

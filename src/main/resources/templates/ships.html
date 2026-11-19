@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/layout :: head('선박')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+<main>
+    <h1>선박</h1>
+    <p class="message" th:if="${message}" th:text="${message}"></p>
+
+    <section sec:authorize="hasRole('ADMIN')">
+        <h2>선박 등록</h2>
+        <form th:action="@{/ships}" method="post">
+            <p>
+                <label for="name">이름</label>
+                <input type="text" id="name" name="name" th:value="${form?.name}" maxlength="50" required>
+                <span class="error" th:if="${fieldErrors?.get('name')}" th:text="${fieldErrors.get('name')}"></span>
+            </p>
+            <button type="submit">등록</button>
+        </form>
+    </section>
+
+    <h2>선박 목록</h2>
+    <p th:text="|총 ${ships.totalElements}척|"></p>
+    <table>
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>이름</th>
+            <th sec:authorize="hasRole('ADMIN')">관리</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="ship : ${ships.content}">
+            <td th:text="${ship.id}"></td>
+            <td th:text="${ship.name}"></td>
+            <td sec:authorize="hasRole('ADMIN')">
+                <a th:href="@{/ships/{id}/requirements(id=${ship.id})}">비치 기준</a>
+                <a th:href="@{/ships/{id}/inventory(id=${ship.id})}">재고 현황</a>
+            </td>
+        </tr>
+        <tr th:if="${ships.content.isEmpty()}">
+            <td colspan="3">선박이 없습니다.</td>
+        </tr>
+        </tbody>
+    </table>
+    <nav th:replace="~{fragments/layout :: pagination(${ships}, '/ships')}"></nav>
+</main>
+</body>
+</html>

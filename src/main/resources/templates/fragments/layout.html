@@ -11,6 +11,11 @@
         header nav { display: flex; gap: 12px; flex: 1; }
         main { padding: 16px; }
         .error { color: #c00; }
+        .message { color: #070; }
+        table { border-collapse: collapse; margin: 8px 0; }
+        th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
+        form p { margin: 6px 0; }
+        label { display: inline-block; min-width: 110px; }
     </style>
 </head>
 
@@ -35,6 +40,13 @@
         <button type="submit">로그아웃</button>
     </form>
 </header>
+
+<!-- 목록 페이지 이동. pageData는 PageResponse, baseUrl은 목록 경로. -->
+<nav th:fragment="pagination(pageData, baseUrl)" th:if="${pageData.totalPages > 1}">
+    <a th:if="${pageData.page > 0}" th:href="@{${baseUrl}(page=${pageData.page - 1}, size=${pageData.size})}">이전</a>
+    <span th:text="|${pageData.page + 1} / ${pageData.totalPages}|"></span>
+    <a th:if="${pageData.hasNext}" th:href="@{${baseUrl}(page=${pageData.page + 1}, size=${pageData.size})}">다음</a>
+</nav>
 
 </body>
 </html>
