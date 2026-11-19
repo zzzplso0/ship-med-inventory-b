@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+
+<head th:fragment="head(title)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title} + ' - shipmed'">shipmed</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; }
+        header { display: flex; gap: 16px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #ccc; }
+        header nav { display: flex; gap: 12px; flex: 1; }
+        main { padding: 16px; }
+        .error { color: #c00; }
+    </style>
+</head>
+
+<body>
+
+<header th:fragment="header">
+    <strong>shipmed</strong>
+    <nav sec:authorize="hasRole('ADMIN')">
+        <a th:href="@{/ships}">선박</a>
+        <a th:href="@{/medications}">약품</a>
+        <a th:href="@{/users}">계정</a>
+    </nav>
+    <nav sec:authorize="hasRole('MEDICAL_OFFICER')" th:with="shipId=${#authentication.principal.shipId}">
+        <a th:href="@{/ships/{id}/inventory(id=${shipId})}">재고 현황</a>
+        <a th:href="@{/ships/{id}/lots(id=${shipId})}">입고</a>
+        <a th:href="@{/ships/{id}/usages(id=${shipId})}">사용</a>
+        <a th:href="@{/ships/{id}/requirements(id=${shipId})}">비치 기준</a>
+        <a th:href="@{/medications}">약품</a>
+    </nav>
+    <span sec:authentication="principal.loginId"></span>
+    <form th:action="@{/logout}" method="post">
+        <button type="submit">로그아웃</button>
+    </form>
+</header>
+
+</body>
+</html>

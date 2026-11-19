@@ -15,5 +15,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(shipAccessInterceptor).addPathPatterns("/api/ships/{shipId}/**");
+        registry.addInterceptor(shipAccessInterceptor).addPathPatterns("/ships/{shipId}/**");
     }
 }
