@@ -556,6 +556,7 @@ ON uq_usage_idempotency 위반:
 | GET      | `/ships/{shipId}/usages/result`  | 사용 결과(취소 폼)          | 의무사관                                |
 | POST     | `/usages/{usageId}/cancellation` | 사용 취소                   | 의무사관                                |
 | GET      | `/ships/{shipId}/inventory`      | 재고 현황                   | 관리자, 의무사관(소속 선박)             |
+| GET      | `/inventory?shipId=`             | 선박 선택 → 재고 현황 redirect | 관리자                                  |
 
 - 목록 화면의 `page`, `size`는 API와 같이 `PageQuery`로 받는다.
 - 비치 기준 설정은 API의 PUT 대신 폼 POST로 받고, `medicationId`는 폼 값으로 보낸다.
