@@ -1,8 +1,10 @@
 package com.shipmed.shipmed.view;
 
+import com.shipmed.shipmed.domain.stock.dto.request.StockLotListQuery;
 import com.shipmed.shipmed.domain.stock.dto.response.StockLotDto;
 import com.shipmed.shipmed.domain.stock.service.StockLotService;
 import com.shipmed.shipmed.global.exception.BusinessException;
+import com.shipmed.shipmed.global.request.PageQuery;
 import com.shipmed.shipmed.global.security.principal.CustomUserDetails;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,11 +18,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 
 @RequiredArgsConstructor
 @RequestMapping("/ships/{shipId}/lots")
@@ -60,5 +64,21 @@ public class LotViewController {
         }
 
         return "redirect:/ships/{shipId}/lots";
+    }
+
+    // 관리자는 모든 선박, 의무사관은 소속 선박만(인터셉터). 없는 선박은 404 화면.
+    @GetMapping("/list")
+    public String list(@PathVariable Long shipId, @ModelAttribute("query") StockLotListQuery query,
+                       @Valid @ModelAttribute PageQuery pageQuery, Model model) {
+        model.addAttribute("shipId", shipId);
+        model.addAttribute("lots", stockLotService.getLots(shipId, query, pageQuery));
+        // 페이지를 넘겨도 필터가 유지되도록 필터를 담은 목록 경로를 넘긴다.
+        model.addAttribute("pageUrl", UriComponentsBuilder.fromPath("/ships/{shipId}/lots/list")
+                .queryParamIfPresent("medicationId", Optional.ofNullable(query.medicationId()))
+                .queryParamIfPresent("status", Optional.ofNullable(query.status()))
+                .buildAndExpand(shipId)
+                .toUriString());
+
+        return "lot-list";
     }
 }
