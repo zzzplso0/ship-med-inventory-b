@@ -3,17 +3,21 @@ package com.shipmed.shipmed.domain.stock.service;
 import com.shipmed.shipmed.domain.medication.entity.Medication;
 import com.shipmed.shipmed.domain.medication.repository.MedicationRepository;
 import com.shipmed.shipmed.domain.ship.entity.Ship;
+import com.shipmed.shipmed.domain.ship.exception.ShipNotFoundException;
 import com.shipmed.shipmed.domain.ship.repository.ShipRepository;
 import com.shipmed.shipmed.domain.stock.dto.StockLotMapperImpl;
 import com.shipmed.shipmed.domain.stock.dto.request.StockLotCreateRequest;
+import com.shipmed.shipmed.domain.stock.dto.request.StockLotListQuery;
 import com.shipmed.shipmed.domain.stock.entity.StockLot;
 import com.shipmed.shipmed.domain.stock.exception.StockLotDuplicateException;
 import com.shipmed.shipmed.domain.stock.exception.StockLotExpiredOnArrivalException;
 import com.shipmed.shipmed.domain.stock.exception.StockLotReceivedAtInFutureException;
+import com.shipmed.shipmed.domain.stock.repository.StockLotQueryMapper;
 import com.shipmed.shipmed.domain.stock.repository.StockLotRepository;
 import com.shipmed.shipmed.domain.user.entity.Role;
 import com.shipmed.shipmed.domain.user.entity.User;
 import com.shipmed.shipmed.domain.user.repository.UserRepository;
+import com.shipmed.shipmed.global.request.PageQuery;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class StockLotServiceTest {
@@ -59,23 +64,29 @@ class StockLotServiceTest {
 	@Mock
 	private UserRepository userRepository;
 
+	@Mock
+	private StockLotQueryMapper stockLotQueryMapper;
+
 	private StockLotService stockLotService;
 
 	@BeforeEach
 	void setUp() {
 		stockLotService = new StockLotServiceImpl(
 				stockLotRepository, shipRepository, medicationRepository, userRepository,
-				new StockLotMapperImpl(), FIXED_CLOCK);
-
-		Medication medication = new Medication("약품", null, "정");
-		ReflectionTestUtils.setField(medication, "id", MEDICATION_ID);
-
-		given(medicationRepository.findById(MEDICATION_ID)).willReturn(Optional.of(medication));
+				new StockLotMapperImpl(), FIXED_CLOCK, stockLotQueryMapper);
 	}
 
 	@Nested
 	@DisplayName("재고 입고")
 	class Create {
+
+		@BeforeEach
+		void setUp() {
+			Medication medication = new Medication("약품", null, "정");
+			ReflectionTestUtils.setField(medication, "id", MEDICATION_ID);
+
+			given(medicationRepository.findById(MEDICATION_ID)).willReturn(Optional.of(medication));
+		}
 		@Test
 		@DisplayName("만료일이 오늘이고 입고 시각이 현재면 입고자를 넣어 저장한다")
 		void givenBoundaryDates_whenCreate_thenSavesWithReceiver() {
@@ -132,6 +143,21 @@ class StockLotServiceTest {
 		private DataIntegrityViolationException violation(String constraintName) {
 			return new DataIntegrityViolationException(
 					"위반", new ConstraintViolationException("위반", null, constraintName));
+		}
+	}
+
+	@Nested
+	@DisplayName("로트 목록")
+	class GetLots {
+
+		@Test
+		@DisplayName("선박이 없으면 SHIP_NOT_FOUND이고 목록을 조회하지 않는다")
+		void givenNoShip_whenGetLots_thenThrowsShipNotFound() {
+			given(shipRepository.existsById(SHIP_ID)).willReturn(false);
+
+			assertThatThrownBy(() -> stockLotService.getLots(SHIP_ID, new StockLotListQuery(null, null), new PageQuery(null, null)))
+					.isInstanceOf(ShipNotFoundException.class);
+			verifyNoInteractions(stockLotQueryMapper);
 		}
 	}
 }
