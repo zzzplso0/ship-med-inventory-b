@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/layout :: head('로트 목록')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+<main>
+    <h1 th:text="|선박 ${shipId} 로트 목록|">로트 목록</h1>
+    <p><small>유효기한이 가까운 순(유효기한 → 입고 시각 → ID)입니다. 만료·폐기·잔량 0인 로트는 사용할 때 차감되지 않습니다.</small></p>
+
+    <form th:action="@{/ships/{id}/lots/list(id=${shipId})}" method="get">
+        <label for="medicationId">약품 ID</label>
+        <input type="number" id="medicationId" name="medicationId" th:value="${query.medicationId}" min="1" placeholder="전체">
+        <label for="status">상태</label>
+        <select id="status" name="status">
+            <option value="">전체</option>
+            <option value="ACTIVE" th:selected="${query.status?.name() == 'ACTIVE'}">정상</option>
+            <option value="DISCARDED" th:selected="${query.status?.name() == 'DISCARDED'}">폐기</option>
+        </select>
+        <button type="submit">조회</button>
+        <small><a th:href="@{/medications}">약품 목록</a>에서 ID 확인</small>
+    </form>
+
+    <table>
+        <thead>
+        <tr>
+            <th>로트 ID</th>
+            <th>약품</th>
+            <th>로트 번호</th>
+            <th>유효기한</th>
+            <th>잔량 / 입고량</th>
+            <th>상태</th>
+            <th>입고(UTC)</th>
+            <th>폐기(UTC)</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="lot : ${lots.content}">
+            <td th:text="${lot.lotId}"></td>
+            <td th:text="${lot.medicationName}"></td>
+            <td th:text="${lot.lotNumber}"></td>
+            <td>
+                <span th:text="${lot.expiryDate}"></span>
+                <span class="error" th:if="${lot.expired}">만료</span>
+            </td>
+            <td th:text="|${lot.remainingQuantity} / ${lot.initialQuantity} ${lot.unit}|"></td>
+            <td th:switch="${lot.status.name()}">
+                <span th:case="'DISCARDED'" class="error">폐기</span>
+                <span th:case="*">정상</span>
+            </td>
+            <td th:text="|${lot.receivedAt}, ${lot.receivedBy}|"></td>
+            <td>
+                <span th:if="${lot.discardedAt == null}">-</span>
+                <span th:unless="${lot.discardedAt == null}"
+                      th:text="|${lot.discardedAt}, ${lot.discardedBy}, ${lot.discardedReason}|"></span>
+            </td>
+        </tr>
+        <tr th:if="${lots.content.isEmpty()}">
+            <td colspan="8">로트가 없습니다.</td>
+        </tr>
+        </tbody>
+    </table>
+    <nav th:replace="~{fragments/layout :: pagination(${lots}, ${pageUrl})}"></nav>
+</main>
+</body>
+</html>

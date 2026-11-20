@@ -6,6 +6,7 @@ import com.shipmed.shipmed.domain.medication.entity.Medication;
 import com.shipmed.shipmed.domain.medication.repository.MedicationRepository;
 import com.shipmed.shipmed.domain.ship.entity.Ship;
 import com.shipmed.shipmed.domain.ship.repository.ShipRepository;
+import com.shipmed.shipmed.domain.stock.entity.LotStatus;
 import com.shipmed.shipmed.domain.stock.entity.StockLot;
 import com.shipmed.shipmed.domain.stock.repository.StockLotRepository;
 import com.shipmed.shipmed.domain.user.entity.Role;
@@ -22,6 +23,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -32,8 +34,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -163,6 +167,78 @@ class StockLotIntegrationTest {
 				.andExpect(status().isForbidden());
 
 		assertThat(stockLotRepository.count()).isZero();
+	}
+
+	// requirements 5장 "로트 목록": W(만료), X(폐기, Y와 유효기한 같고 먼저 입고), Y, 모르핀 Z.
+	@Test
+	@DisplayName("필터가 없으면 폐기·만료 로트를 포함해 FEFO 순으로 보여 주고 만료 여부를 계산한다")
+	void givenLots_whenGetLotsWithoutFilter_thenReturnsAllInFefoOrder() throws Exception {
+		saveListLots();
+
+		mockMvc.perform(get("/api/ships/" + ship.getId() + "/lots").with(user(officer)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[*].lotNumber").value(contains("W", "X", "Y", "Z")))
+				.andExpect(jsonPath("$.content[0].expired").value(true))
+				.andExpect(jsonPath("$.content[1].expired").value(false))
+				.andExpect(jsonPath("$.content[1].status").value("DISCARDED"))
+				.andExpect(jsonPath("$.content[1].discardedBy").value("의무사관"))
+				.andExpect(jsonPath("$.content[0].receivedBy").value("의무사관"))
+				.andExpect(jsonPath("$.content[3].medicationName").value("모르핀"))
+				.andExpect(jsonPath("$.totalElements").value(4));
+	}
+
+	@Test
+	@DisplayName("약품과 상태로 거르면 해당 로트만 보여 주고 건수도 같이 거른다")
+	void givenLots_whenGetLotsWithMedicationAndStatus_thenReturnsFiltered() throws Exception {
+		saveListLots();
+
+		mockMvc.perform(get("/api/ships/" + ship.getId() + "/lots").with(user(officer))
+						.param("medicationId", medication.getId().toString())
+						.param("status", "ACTIVE"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[*].lotNumber").value(contains("W", "Y")))
+				.andExpect(jsonPath("$.totalElements").value(2));
+	}
+
+	@Test
+	@DisplayName("잘못된 상태 값이면 400")
+	void givenInvalidStatus_whenGetLots_thenReturns400() throws Exception {
+		mockMvc.perform(get("/api/ships/" + ship.getId() + "/lots").with(user(officer)).param("status", "abc"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	@DisplayName("관리자는 선박의 로트 목록을 보고, 의무사관이 다른 선박을 조회하면 403")
+	void givenAdminAndOtherShip_whenGetLots_thenReturns200And403() throws Exception {
+		User admin = userRepository.save(new User("admin_1", "관리자", "encoded", Role.ADMIN, null));
+		Ship otherShip = shipRepository.save(new Ship("다른 선박"));
+
+		mockMvc.perform(get("/api/ships/" + ship.getId() + "/lots").with(user(CustomUserDetails.from(admin))))
+				.andExpect(status().isOk());
+		mockMvc.perform(get("/api/ships/" + otherShip.getId() + "/lots").with(user(officer)))
+				.andExpect(status().isForbidden());
+	}
+
+	private void saveListLots() {
+		Medication morphine = medicationRepository.save(new Medication("모르핀", null, "앰플"));
+
+		saveLot("W", "2026-07-21", "2026-03-01T09:00:00Z", medication);
+		StockLot x = saveLot("X", "2026-08-01", "2026-03-01T09:00:00Z", medication);
+		saveLot("Y", "2026-08-01", "2026-05-01T09:00:00Z", medication);
+		saveLot("Z", "2027-01-31", "2026-03-01T09:00:00Z", morphine);
+
+		// 폐기 기능(#64) 전이라 상태를 직접 바꾼다.
+		ReflectionTestUtils.setField(x, "status", LotStatus.DISCARDED);
+		ReflectionTestUtils.setField(x, "discardedAt", Instant.parse("2026-07-01T00:00:00Z"));
+		ReflectionTestUtils.setField(x, "discardedBy", officerUser);
+		ReflectionTestUtils.setField(x, "discardedReason", "파손");
+		// MyBatis는 JPA를 거치지 않으므로 조회 전에 DB에 반영한다.
+		stockLotRepository.saveAndFlush(x);
+	}
+
+	private StockLot saveLot(String lotNumber, String expiryDate, String receivedAt, Medication medication) {
+		return stockLotRepository.saveAndFlush(new StockLot(lotNumber, 10, LocalDate.parse(expiryDate),
+				Instant.parse(receivedAt), officerUser, ship, medication));
 	}
 
 	private String body(String lotNumber, int quantity, String expiryDate, String receivedAt) {

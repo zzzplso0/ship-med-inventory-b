@@ -1,8 +1,12 @@
 package com.shipmed.shipmed.domain.stock.controller;
 
 import com.shipmed.shipmed.domain.stock.dto.request.StockLotCreateRequest;
+import com.shipmed.shipmed.domain.stock.dto.request.StockLotListQuery;
 import com.shipmed.shipmed.domain.stock.dto.response.StockLotDto;
+import com.shipmed.shipmed.domain.stock.dto.response.StockLotListDto;
 import com.shipmed.shipmed.domain.stock.service.StockLotService;
+import com.shipmed.shipmed.global.request.PageQuery;
+import com.shipmed.shipmed.global.response.PageResponse;
 import com.shipmed.shipmed.global.security.principal.CustomUserDetails;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,5 +29,14 @@ public class StockLotController {
         StockLotDto stockLotDto = stockLotService.create(shipId, stockLotCreateRequest, customUserDetails.getUserId());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(stockLotDto);
+    }
+
+    @GetMapping("/{shipId}/lots")
+    public ResponseEntity<PageResponse<StockLotListDto>> getLots(@PathVariable Long shipId,
+                                                                 @ModelAttribute StockLotListQuery stockLotListQuery,
+                                                                 @Valid @ModelAttribute PageQuery pageQuery) {
+        PageResponse<StockLotListDto> response = stockLotService.getLots(shipId, stockLotListQuery, pageQuery);
+
+        return ResponseEntity.ok(response);
     }
 }
