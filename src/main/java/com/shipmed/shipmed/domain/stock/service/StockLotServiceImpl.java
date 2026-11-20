@@ -8,12 +8,16 @@ import com.shipmed.shipmed.domain.ship.exception.ShipNotFoundException;
 import com.shipmed.shipmed.domain.ship.repository.ShipRepository;
 import com.shipmed.shipmed.domain.stock.dto.StockLotMapper;
 import com.shipmed.shipmed.domain.stock.dto.request.StockLotCreateRequest;
+import com.shipmed.shipmed.domain.stock.dto.request.StockLotDisposalRequest;
 import com.shipmed.shipmed.domain.stock.dto.request.StockLotListQuery;
+import com.shipmed.shipmed.domain.stock.dto.response.StockLotDisposalDto;
 import com.shipmed.shipmed.domain.stock.dto.response.StockLotDto;
 import com.shipmed.shipmed.domain.stock.dto.response.StockLotListDto;
+import com.shipmed.shipmed.domain.stock.entity.LotStatus;
 import com.shipmed.shipmed.domain.stock.entity.StockLot;
 import com.shipmed.shipmed.domain.stock.exception.StockLotDuplicateException;
 import com.shipmed.shipmed.domain.stock.exception.StockLotExpiredOnArrivalException;
+import com.shipmed.shipmed.domain.stock.exception.StockLotNotFoundException;
 import com.shipmed.shipmed.domain.stock.exception.StockLotReceivedAtInFutureException;
 import com.shipmed.shipmed.domain.stock.repository.StockLotQueryMapper;
 import com.shipmed.shipmed.domain.stock.repository.StockLotRepository;
@@ -109,5 +113,22 @@ public class StockLotServiceImpl implements StockLotService {
         long total = stockLotQueryMapper.countLots(shipId, stockLotListQuery);
 
         return PageResponse.from(new PageImpl<>(stockLotListDtos, pageQuery.toPageable(), total));
+    }
+
+    @Transactional
+    @Override
+    public StockLotDisposalDto discard(Long shipId, Long lotId, StockLotDisposalRequest stockLotDisposalRequest, Long userId) {
+        StockLot stockLot = stockLotRepository.findByIdAndShipId(lotId, shipId)
+                .orElseThrow(StockLotNotFoundException::new);
+
+        if (stockLot.getStatus() == LotStatus.DISCARDED) {
+            return stockLotMapper.toDtoDisposal(stockLot);
+        }
+
+        User user = userRepository.getReferenceById(userId);
+
+        stockLot.discard(user, stockLotDisposalRequest.reason(), Instant.now(clock));
+
+        return stockLotMapper.toDtoDisposal(stockLot);
     }
 }

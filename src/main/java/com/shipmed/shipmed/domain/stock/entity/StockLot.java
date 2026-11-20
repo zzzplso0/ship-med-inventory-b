@@ -80,4 +80,11 @@ public class StockLot extends BaseEntity {
     public void addQuantity(int quantity) {
         this.remainingQuantity += quantity;
     }
+
+    public void discard(User discardedBy, String reason, Instant discardedAt) {
+        this.discardedBy = discardedBy;
+        this.discardedReason = reason;
+        this.discardedAt = discardedAt;
+        this.status = LotStatus.DISCARDED;
+    }
 }
