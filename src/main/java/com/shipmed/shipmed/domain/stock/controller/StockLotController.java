@@ -1,7 +1,9 @@
 package com.shipmed.shipmed.domain.stock.controller;
 
 import com.shipmed.shipmed.domain.stock.dto.request.StockLotCreateRequest;
+import com.shipmed.shipmed.domain.stock.dto.request.StockLotDisposalRequest;
 import com.shipmed.shipmed.domain.stock.dto.request.StockLotListQuery;
+import com.shipmed.shipmed.domain.stock.dto.response.StockLotDisposalDto;
 import com.shipmed.shipmed.domain.stock.dto.response.StockLotDto;
 import com.shipmed.shipmed.domain.stock.dto.response.StockLotListDto;
 import com.shipmed.shipmed.domain.stock.service.StockLotService;
@@ -38,5 +40,15 @@ public class StockLotController {
         PageResponse<StockLotListDto> response = stockLotService.getLots(shipId, stockLotListQuery, pageQuery);
 
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{shipId}/lots/{lotId}/disposal")
+    public ResponseEntity<StockLotDisposalDto> disposal(@PathVariable Long shipId,
+                                                        @PathVariable Long lotId,
+                                                        @Valid @RequestBody StockLotDisposalRequest stockLotDisposalRequest,
+                                                        @AuthenticationPrincipal CustomUserDetails customUserDetails) {
+        StockLotDisposalDto result = stockLotService.discard(shipId, lotId, stockLotDisposalRequest, customUserDetails.getUserId());
+
+        return ResponseEntity.ok(result);
     }
 }

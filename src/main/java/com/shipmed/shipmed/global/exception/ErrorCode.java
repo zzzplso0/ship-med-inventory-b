@@ -27,6 +27,7 @@ public enum ErrorCode {
     EXPIRED_ON_ARRIVAL(HttpStatus.BAD_REQUEST, "유효기한이 지난 로트는 입고할 수 없습니다."),
     RECEIVED_AT_IN_FUTURE(HttpStatus.BAD_REQUEST, "입고 시각은 현재보다 미래일 수 없습니다."),
     DUPLICATE_LOT(HttpStatus.CONFLICT, "같은 약품에 이미 입고된 로트 번호입니다."),
+    LOT_NOT_FOUND(HttpStatus.NOT_FOUND, "로트를 찾을 수 없습니다."),
 
     // usage
     INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "가용 재고가 부족합니다."),

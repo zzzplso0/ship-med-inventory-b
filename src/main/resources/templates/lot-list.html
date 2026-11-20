@@ -5,6 +5,7 @@
 <header th:replace="~{fragments/layout :: header}"></header>
 <main>
     <h1 th:text="|선박 ${shipId} 로트 목록|">로트 목록</h1>
+    <p class="message" th:if="${message}" th:text="${message}"></p>
     <p><small>유효기한이 가까운 순(유효기한 → 입고 시각 → ID)입니다. 만료·폐기·잔량 0인 로트는 사용할 때 차감되지 않습니다.</small></p>
 
     <form th:action="@{/ships/{id}/lots/list(id=${shipId})}" method="get">
@@ -48,10 +49,20 @@
                 <span th:case="*">정상</span>
             </td>
             <td th:text="|${lot.receivedAt}, ${lot.receivedBy}|"></td>
-            <td>
-                <span th:if="${lot.discardedAt == null}">-</span>
-                <span th:unless="${lot.discardedAt == null}"
+            <td th:switch="${lot.status.name()}">
+                <span th:case="'DISCARDED'"
                       th:text="|${lot.discardedAt}, ${lot.discardedBy}, ${lot.discardedReason}|"></span>
+                <th:block th:case="*">
+                    <!-- 폐기 폼은 의무사관에게, 폐기되지 않은 로트에만 보인다(requirements 6장). -->
+                    <form sec:authorize="hasRole('MEDICAL_OFFICER')"
+                          th:action="@{/ships/{shipId}/lots/{lotId}/disposal(shipId=${shipId}, lotId=${lot.lotId})}"
+                          method="post">
+                        <input type="text" name="reason" maxlength="255" placeholder="폐기 사유" aria-label="폐기 사유">
+                        <button type="submit">폐기</button>
+                        <span class="error" th:if="${disposalErrorLotId == lot.lotId}" th:text="${disposalError}"></span>
+                    </form>
+                    <span sec:authorize="!hasRole('MEDICAL_OFFICER')">-</span>
+                </th:block>
             </td>
         </tr>
         <tr th:if="${lots.content.isEmpty()}">
