@@ -1,6 +1,8 @@
 package com.shipmed.shipmed.view;
 
+import com.shipmed.shipmed.domain.stock.dto.request.StockLotDisposalRequest;
 import com.shipmed.shipmed.domain.stock.dto.request.StockLotListQuery;
+import com.shipmed.shipmed.domain.stock.dto.response.StockLotDisposalDto;
 import com.shipmed.shipmed.domain.stock.dto.response.StockLotDto;
 import com.shipmed.shipmed.domain.stock.service.StockLotService;
 import com.shipmed.shipmed.global.exception.BusinessException;
@@ -80,5 +82,24 @@ public class LotViewController {
                 .toUriString());
 
         return "lot-list";
+    }
+
+    // 성공·검증 실패 모두 목록으로 돌아간다. 필터·페이지는 유지하지 않는다(design 6.4).
+    // 그 선박에 없는 로트(404)는 오류 화면.
+    @PostMapping("/{lotId}/disposal")
+    public String discard(@PathVariable Long shipId, @PathVariable Long lotId,
+                          @Valid @ModelAttribute StockLotDisposalRequest disposalForm, BindingResult bindingResult,
+                          @AuthenticationPrincipal CustomUserDetails principal, RedirectAttributes redirectAttributes) {
+        if (bindingResult.hasErrors()) {
+            // 메시지를 그 로트 행 옆에 보여 준다.
+            redirectAttributes.addFlashAttribute("disposalErrorLotId", lotId);
+            redirectAttributes.addFlashAttribute("disposalError", ViewErrors.fieldErrors(bindingResult).get("reason"));
+            return "redirect:/ships/{shipId}/lots/list";
+        }
+
+        StockLotDisposalDto disposed = stockLotService.discard(shipId, lotId, disposalForm, principal.getUserId());
+        redirectAttributes.addFlashAttribute("message", "로트 ID " + disposed.lotId() + "을(를) 폐기했습니다.");
+
+        return "redirect:/ships/{shipId}/lots/list";
     }
 }
