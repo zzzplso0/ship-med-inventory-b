@@ -1,11 +1,15 @@
 package com.shipmed.shipmed.view;
 
 import com.shipmed.shipmed.domain.usage.dto.request.UsageCancelRequest;
+import com.shipmed.shipmed.domain.usage.dto.request.UsageHistoryQuery;
 import com.shipmed.shipmed.domain.usage.dto.response.UsageCancelDto;
+import com.shipmed.shipmed.domain.usage.dto.response.UsageHistoryDto;
 import com.shipmed.shipmed.domain.usage.dto.response.UsageResult;
 import com.shipmed.shipmed.domain.usage.service.UsageService;
 import com.shipmed.shipmed.global.exception.BusinessException;
 import com.shipmed.shipmed.global.exception.ErrorCode;
+import com.shipmed.shipmed.global.request.PageQuery;
+import com.shipmed.shipmed.global.response.PageResponse;
 import com.shipmed.shipmed.global.security.principal.CustomUserDetails;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,8 +21,11 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @RequiredArgsConstructor
@@ -95,5 +102,54 @@ public class UsageViewController {
                     + " (요청 " + e.getData().get("requested") + ", 가용 " + e.getData().get("available") + ")";
         }
         return e.getErrorCode().getMessage();
+    }
+
+    // 관리자는 모든 선박, 의무사관은 소속 선박만(인터셉터). 필터·페이지 오류는 BindingResult 없이 400 화면으로 보낸다(design 6.4).
+    // 상세는 selected로 고른 기록을 현재 페이지의 결과에서 꺼낸다. 결과에 없으면 상세를 그리지 않는다.
+    @GetMapping("/ships/{shipId}/usages/history")
+    public String history(@PathVariable Long shipId, @Valid @ModelAttribute("query") UsageHistoryQuery query,
+                          @Valid @ModelAttribute PageQuery pageQuery, @RequestParam(required = false) Long selected,
+                          Model model) {
+        PageResponse<UsageHistoryDto> history = usageService.getHistory(shipId, query, pageQuery);
+
+        model.addAttribute("shipId", shipId);
+        model.addAttribute("history", history);
+        model.addAttribute("selectedUsage", history.content().stream()
+                .filter(usage -> usage.usageId().equals(selected))
+                .findFirst()
+                .orElse(null));
+        // 페이지를 넘겨도 필터가 유지되도록 필터를 담은 이력 경로를 넘긴다.
+        model.addAttribute("pageUrl", historyUrl(shipId, query).toUriString());
+
+        return "usage-history";
+    }
+
+    // 성공·사유 검증 실패 모두 취소 전의 필터·페이지를 유지하고 그 기록을 고른 이력 화면으로 돌아간다(design 6.4).
+    // 남의 기록(403), 없는 기록(404)은 오류 화면.
+    @PostMapping("/ships/{shipId}/usages/{usageId}/cancellation")
+    public String cancelFromHistory(@PathVariable Long shipId, @PathVariable Long usageId,
+                                    @Valid @ModelAttribute("cancelForm") UsageCancelRequest cancelForm, BindingResult bindingResult,
+                                    @ModelAttribute("query") UsageHistoryQuery query, @ModelAttribute PageQuery pageQuery,
+                                    @AuthenticationPrincipal CustomUserDetails principal, RedirectAttributes redirectAttributes) {
+        if (bindingResult.hasErrors()) {
+            redirectAttributes.addFlashAttribute("cancelError", ViewErrors.fieldErrors(bindingResult).get("reason"));
+        } else {
+            UsageCancelDto cancelled = usageService.cancel(usageId, principal.getUserId(), cancelForm);
+            redirectAttributes.addFlashAttribute("message", "사용 기록 ID " + cancelled.usageId() + "을(를) 취소했습니다.");
+        }
+
+        return "redirect:" + historyUrl(shipId, query)
+                .queryParam("page", pageQuery.page())
+                .queryParam("size", pageQuery.size())
+                .queryParam("selected", usageId)
+                .toUriString();
+    }
+
+    private UriComponentsBuilder historyUrl(Long shipId, UsageHistoryQuery query) {
+        return UriComponentsBuilder.fromPath("/ships/" + shipId + "/usages/history")
+                .queryParamIfPresent("from", Optional.ofNullable(query.from()))
+                .queryParamIfPresent("to", Optional.ofNullable(query.to()))
+                .queryParamIfPresent("medicationId", Optional.ofNullable(query.medicationId()))
+                .queryParamIfPresent("status", Optional.ofNullable(query.status()));
     }
 }

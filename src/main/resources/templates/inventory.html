@@ -14,6 +14,7 @@
     </form>
     <p sec:authorize="hasRole('ADMIN')">
         <a th:href="@{/ships/{id}/lots/list(id=${shipId})}">이 선박의 로트 목록</a>
+        <a th:href="@{/ships/{id}/usages/history(id=${shipId})}">이 선박의 사용 이력</a>
     </p>
 
     <p>

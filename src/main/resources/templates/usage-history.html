@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/layout :: head('사용 이력')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: header}"></header>
+<main>
+    <h1 th:text="|선박 ${shipId} 사용 이력|">사용 이력</h1>
+    <p class="message" th:if="${message}" th:text="${message}"></p>
+    <p><small>최신순(사용 시각 → ID)입니다. 기간은 UTC 날짜 기준이며 시작일·종료일을 포함합니다.</small></p>
+
+    <form th:action="@{/ships/{id}/usages/history(id=${shipId})}" method="get">
+        <label for="from">시작일</label>
+        <input type="date" id="from" name="from" th:value="${query.from}">
+        <label for="to">종료일</label>
+        <input type="date" id="to" name="to" th:value="${query.to}">
+        <label for="medicationId">약품 ID</label>
+        <input type="number" id="medicationId" name="medicationId" th:value="${query.medicationId}" min="1" placeholder="전체">
+        <label for="status">상태</label>
+        <select id="status" name="status">
+            <option value="">전체</option>
+            <option value="ACTIVE" th:selected="${query.status?.name() == 'ACTIVE'}">정상</option>
+            <option value="CANCELLED" th:selected="${query.status?.name() == 'CANCELLED'}">취소됨</option>
+        </select>
+        <button type="submit">조회</button>
+        <small><a th:href="@{/medications}">약품 목록</a>에서 ID 확인</small>
+    </form>
+
+    <table>
+        <thead>
+        <tr>
+            <th>사용 ID</th>
+            <th>사용(UTC)</th>
+            <th>약품</th>
+            <th>수량</th>
+            <th>상태</th>
+            <th>기록자</th>
+            <th>상세</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="usage : ${history.content}">
+            <td th:text="${usage.usageId}"></td>
+            <td th:text="${usage.usedAt}"></td>
+            <td th:text="${usage.medicationName}"></td>
+            <td th:text="|${usage.quantity} ${usage.unit}|"></td>
+            <td th:switch="${usage.status.name()}">
+                <span th:case="'CANCELLED'" class="error">취소됨</span>
+                <span th:case="*">정상</span>
+            </td>
+            <td th:text="${usage.userName}"></td>
+            <!-- 상세는 현재 페이지 결과에서 꺼내므로 필터·페이지를 그대로 둔다. -->
+            <td><a th:href="@{${pageUrl}(page=${history.page}, size=${history.size}, selected=${usage.usageId})}">보기</a></td>
+        </tr>
+        <tr th:if="${history.content.isEmpty()}">
+            <td colspan="7">사용 기록이 없습니다.</td>
+        </tr>
+        </tbody>
+    </table>
+    <nav th:replace="~{fragments/layout :: pagination(${history}, ${pageUrl})}"></nav>
+
+    <section th:if="${selectedUsage}" th:with="usage=${selectedUsage}">
+        <h2 th:text="|사용 #${usage.usageId} 상세|">상세</h2>
+        <table>
+            <tbody>
+            <tr><th>약품</th><td th:text="|${usage.medicationName} (ID ${usage.medicationId})|"></td></tr>
+            <tr><th>수량</th><td th:text="|${usage.quantity} ${usage.unit}|"></td></tr>
+            <tr><th>상태</th><td th:text="${usage.status.name() == 'ACTIVE'} ? '정상' : '취소됨'"></td></tr>
+            <tr><th>사용 시각(UTC)</th><td th:text="${usage.usedAt}"></td></tr>
+            <tr><th>기록자</th><td th:text="${usage.userName}"></td></tr>
+            <th:block th:if="${usage.status.name() == 'CANCELLED'}">
+                <tr><th>취소 시각(UTC)</th><td th:text="${usage.cancelledAt}"></td></tr>
+                <tr><th>취소자</th><td th:text="${usage.cancelledBy}"></td></tr>
+                <tr><th>취소 사유</th><td th:text="${usage.cancelReason}"></td></tr>
+            </th:block>
+            </tbody>
+        </table>
+
+        <h3>차감한 로트</h3>
+        <table>
+            <thead>
+            <tr><th>로트 ID</th><th>로트 번호</th><th>수량</th></tr>
+            </thead>
+            <tbody>
+            <tr th:each="allocation : ${usage.allocations}">
+                <td th:text="${allocation.lotId}"></td>
+                <td th:text="${allocation.lotNumber}"></td>
+                <td th:text="${allocation.quantity}"></td>
+            </tr>
+            </tbody>
+        </table>
+
+        <!-- 취소 폼은 의무사관 본인이 기록한, 취소되지 않은 기록에만 보인다(requirements 6장). -->
+        <th:block sec:authorize="hasRole('MEDICAL_OFFICER')">
+            <form th:if="${usage.status.name() == 'ACTIVE' and usage.userId == #authentication.principal.userId}"
+                  th:action="@{/ships/{shipId}/usages/{usageId}/cancellation(shipId=${shipId}, usageId=${usage.usageId})}"
+                  method="post">
+                <!-- 취소 후 같은 조건의 이력 화면으로 돌아가도록 현재 필터·페이지를 함께 보낸다(design 6.4). -->
+                <input type="hidden" name="from" th:value="${query.from}">
+                <input type="hidden" name="to" th:value="${query.to}">
+                <input type="hidden" name="medicationId" th:value="${query.medicationId}">
+                <input type="hidden" name="status" th:value="${query.status}">
+                <input type="hidden" name="page" th:value="${history.page}">
+                <input type="hidden" name="size" th:value="${history.size}">
+                <p>
+                    <label for="reason">취소 사유</label>
+                    <input type="text" id="reason" name="reason" maxlength="255">
+                    <span class="error" th:if="${cancelError}" th:text="${cancelError}"></span>
+                </p>
+                <button type="submit">취소</button>
+            </form>
+        </th:block>
+    </section>
+</main>
+</body>
+</html>
