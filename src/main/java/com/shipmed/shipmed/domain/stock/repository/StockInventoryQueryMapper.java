@@ -15,4 +15,6 @@ public interface StockInventoryQueryMapper {
 
     List<StockExpiringLotRow> selectExpiringSoonLots(@Param("shipId") Long shipId, @Param("today") LocalDate today,
                                                      @Param("expiringUntil") LocalDate expiringUntil);
+
+    List<StockExpiringLotRow> selectExpiredLots(@Param("shipId") Long shipId, @Param("today") LocalDate today);
 }

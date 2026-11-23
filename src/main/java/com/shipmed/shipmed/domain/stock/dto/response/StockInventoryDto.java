@@ -10,6 +10,7 @@ public record StockInventoryDto(
         boolean requirementSet,
         Integer minQuantity,
         Boolean shortage,
-        List<StockExpiringLotDto> expiringSoon
+        List<StockExpiringLotDto> expiringSoon,
+        List<StockExpiringLotDto> expired
 ) {
 }

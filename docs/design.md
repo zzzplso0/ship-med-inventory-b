@@ -422,17 +422,19 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 200: 페이지 응답(3.1), content:[ { medicationId, medicationName, minQuantity }, ... ]
 ```
 
-- GET `/api/ships/{shipId}/inventory` — 부족·임박을 한눈에
+- GET `/api/ships/{shipId}/inventory` — 부족·임박·폐기 대상을 한눈에
 
 조회 대상 약품은 해당 배의 (비치 기준이 있는 약품 ∪ 로트가 있는 약품)이다. 기준만 있고 로트가 없는 약품은 `available:0`, 로트만 있고 기준이 없는 약품은 `requirementSet:false`로 나온다.
 
-약품은 `medicationId` 오름차순, `expiringSoon`은 FEFO(`expiry_date → received_at → id`) 순으로 정렬한다.
+약품은 `medicationId` 오름차순, `expiringSoon`과 `expired`는 FEFO(`expiry_date → received_at → id`) 순으로 정렬한다.
+
+`expired`(폐기 대상, requirements 3장)는 임박 로트와 같은 방식으로 따로 조회해 약품별로 붙인다. 조건만 `expiry_date < 오늘`로 다르다.
 
 ```markdown
 200:
 	[
-	  { medicationId, medicationName, unit, available, requirementSet:true,  minQuantity, shortage, expiringSoon:[ {lotId, quantity, expiryDate} ] },
-	  { medicationId, medicationName, unit, available, requirementSet:false, minQuantity:null, shortage:null, expiringSoon:[...] }  // 기준 없는 약품
+	  { medicationId, medicationName, unit, available, requirementSet:true,  minQuantity, shortage, expiringSoon:[ {lotId, quantity, expiryDate} ], expired:[ {lotId, quantity, expiryDate} ] },
+	  { medicationId, medicationName, unit, available, requirementSet:false, minQuantity:null, shortage:null, expiringSoon:[...], expired:[...] }  // 기준 없는 약품
 	]
 404: ship 없음 (관리자. 의무사관은 소속 선박 판정에서 403)
 ```
@@ -633,6 +635,7 @@ ON uq_usage_idempotency 위반:
 
 - 로트 목록과 사용 이력은 입고(`/ships/{shipId}/lots`)·사용(`/ships/{shipId}/usages`) 화면 경로와 겹치지 않게 하위 경로에 둔다.
 - 관리자는 재고 현황 화면의 링크로 그 선박의 로트 목록·사용 이력에 들어간다. 의무사관은 메뉴로 들어간다.
+- 재고 현황 화면의 폐기 대상 링크는 역할과 상관없이 그 선박의 로트 목록(`/ships/{shipId}/lots/list`)으로 보낸다. 폐기 폼은 로트 목록의 기존 규칙대로 의무사관에게만 보인다.
 - 사용 이력의 상세는 `selected=usageId` 쿼리 파라미터로 고르고, 현재 페이지의 조회 결과에서 꺼내 그린다. 사용 기록 한 건을 읽는 API는 만들지 않는다.
 - 이력 화면의 취소는 기존 화면 취소(`/usages/{usageId}/cancellation`)와 같은 서비스를 쓰고, 돌아갈 이력 화면을 알 수 있게 `shipId`가 있는 경로로 받는다.
 - 목록 화면의 `page`, `size`는 API와 같이 `PageQuery`로 받는다.

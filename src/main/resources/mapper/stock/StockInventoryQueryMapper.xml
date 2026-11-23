@@ -54,4 +54,22 @@
         ]]>
     </select>
 
+    <!-- 만료 로트. today > expiry_date -->
+    <select id="selectExpiredLots" resultType="com.shipmed.shipmed.domain.stock.dto.response.StockExpiringLotRow">
+        <![CDATA[
+            SELECT
+                l.medication_id         AS medication_id,
+                l.id                    AS lot_id,
+                l.remaining_quantity    AS quantity,
+                l.expiry_date           AS expiry_date
+            FROM
+                tb_stock_lot l
+            WHERE l.ship_id = #{shipId}
+                AND l.status = 'ACTIVE'
+                AND l.remaining_quantity > 0
+                AND l.expiry_date < #{today}
+            ORDER BY l.medication_id, l.expiry_date, l.received_at, l.id
+        ]]>
+    </select>
+
 </mapper>

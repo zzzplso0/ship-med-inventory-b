@@ -105,7 +105,7 @@ class StockInventoryIntegrationTest {
 	@Test
 	@DisplayName("만료·폐기·잔량 0 로트는 빼고 합산하고, 오늘부터 30일째까지 만료되는 로트만 FEFO 순으로 임박에 넣는다")
 	void givenLotsAroundBoundary_whenGetInventory_thenSumsAvailableAndListsExpiringSoon() throws Exception {
-		saveLot(aspirin, "W", 10, "2026-07-21");
+		StockLot lotW = saveLot(aspirin, "W", 10, "2026-07-21");
 		StockLot lotX = saveLot(aspirin, "X", 10, "2026-07-22");
 		StockLot lotY = saveLot(aspirin, "Y", 10, "2026-08-21");
 		saveLot(aspirin, "Z", 10, "2026-08-22");
@@ -119,7 +119,30 @@ class StockInventoryIntegrationTest {
 				.andExpect(jsonPath("$[0].available").value(30))
 				.andExpect(jsonPath("$[0].expiringSoon.length()").value(2))
 				.andExpect(jsonPath("$[0].expiringSoon[0].lotId").value(lotX.getId()))
-				.andExpect(jsonPath("$[0].expiringSoon[1].lotId").value(lotY.getId()));
+				.andExpect(jsonPath("$[0].expiringSoon[1].lotId").value(lotY.getId()))
+				.andExpect(jsonPath("$[0].expired.length()").value(1))
+				.andExpect(jsonPath("$[0].expired[0].lotId").value(lotW.getId()));
+	}
+
+	@Test
+	@DisplayName("잔량이 남은 만료 로트만 FEFO 순으로 폐기 대상에 넣고, 폐기·잔량 0 로트와 오늘 만료 로트는 뺀다")
+	void givenExpiredLots_whenGetInventory_thenListsExpiredWithRemaining() throws Exception {
+		StockLot lotT = saveLot(aspirin, "T", 10, "2026-07-01");
+		StockLot lotU = saveLot(aspirin, "U", 10, "2026-07-20");
+		ReflectionTestUtils.setField(lotU, "status", LotStatus.DISCARDED);
+		saveLot(aspirin, "V", 10, "2026-07-15").subtractQuantity(10);
+		StockLot lotW = saveLot(aspirin, "W", 10, "2026-07-21");
+		StockLot lotX = saveLot(aspirin, "X", 10, "2026-07-22");
+		stockLotRepository.flush();
+
+		mockMvc.perform(get("/api/ships/" + ship.getId() + "/inventory").with(user(admin())))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].available").value(10))
+				.andExpect(jsonPath("$[0].expiringSoon.length()").value(1))
+				.andExpect(jsonPath("$[0].expiringSoon[0].lotId").value(lotX.getId()))
+				.andExpect(jsonPath("$[0].expired.length()").value(2))
+				.andExpect(jsonPath("$[0].expired[0].lotId").value(lotT.getId()))
+				.andExpect(jsonPath("$[0].expired[1].lotId").value(lotW.getId()));
 	}
 
 	@Test
