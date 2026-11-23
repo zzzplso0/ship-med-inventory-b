@@ -43,27 +43,39 @@ public class StockInventoryServiceImpl implements StockInventoryService {
 
         List<StockInventoryRow> inventoryRows = inventoryQueryMapper.selectInventory(shipId, today);
         List<StockExpiringLotRow> expiringLotRows = inventoryQueryMapper.selectExpiringSoonLots(shipId, today, expiringUntil);
+        List<StockExpiringLotRow> expiredLotRows = inventoryQueryMapper.selectExpiredLots(shipId, today);
 
-        return createResult(inventoryRows, expiringLotRows);
+        return createResult(inventoryRows, expiringLotRows, expiredLotRows);
     }
 
-    private List<StockInventoryDto> createResult(List<StockInventoryRow> inventoryRows, List<StockExpiringLotRow> expiringLotRows) {
+    private List<StockInventoryDto> createResult(List<StockInventoryRow> inventoryRows,
+                                                 List<StockExpiringLotRow> expiringLotRows,
+                                                 List<StockExpiringLotRow> expiredLotRows)
+    {
         List<StockInventoryDto> result = new ArrayList<>(inventoryRows.size());
 
         for (StockInventoryRow inventoryRow : inventoryRows) {
-            List<StockExpiringLotDto> expiringSoon = new ArrayList<>();
-
-            for (StockExpiringLotRow lot : expiringLotRows) {
-                if (inventoryRow.medicationId().equals(lot.medicationId())) {
-                    expiringSoon.add(new StockExpiringLotDto(lot.lotId(), lot.quantity(), lot.expiryDate()));
-                }
-            }
+            List<StockExpiringLotDto> expiringSoon = lotsOf(inventoryRow.medicationId(), expiringLotRows);
+            List<StockExpiringLotDto> expired = lotsOf(inventoryRow.medicationId(), expiredLotRows);
 
             result.add(new StockInventoryDto(
                     inventoryRow.medicationId(), inventoryRow.medicationName(), inventoryRow.unit(),
                     inventoryRow.available(), inventoryRow.requirementSet(), inventoryRow.minQuantity(),
-                    inventoryRow.shortage(), expiringSoon));
+                    inventoryRow.shortage(), expiringSoon, expired));
         }
+
         return result;
+    }
+
+    private List<StockExpiringLotDto> lotsOf(Long medicationId, List<StockExpiringLotRow> lotRows) {
+        List<StockExpiringLotDto> lots = new ArrayList<>();
+
+        for (StockExpiringLotRow lot : lotRows) {
+            if (medicationId.equals(lot.medicationId())) {
+                lots.add(new StockExpiringLotDto(lot.lotId(), lot.quantity(), lot.expiryDate()));
+            }
+        }
+
+        return lots;
     }
 }
