@@ -19,9 +19,12 @@
 
     <p>
         <span th:class="${shortageCount > 0} ? 'error'" th:text="|부족 ${shortageCount}개|"></span>,
-        <span th:text="|유효기한 임박(30일 이내) ${expiringCount}개|"></span>
+        <span th:text="|유효기한 임박(30일 이내) 로트 ${expiringCount}건|"></span>,
+        <span th:class="${expiredCount > 0} ? 'error'" th:text="|폐기 대상 로트 ${expiredCount}건|"></span>
+        <a th:if="${expiredCount > 0}" th:href="@{/ships/{id}/lots/list(id=${shipId})}">로트 목록에서 폐기</a>
     </p>
     <p><small>가용 재고는 유효기한이 지나지 않은 정상 로트의 잔량 합입니다. 비치 기준이 없는 약품은 부족 여부를 판정하지 않습니다.</small></p>
+    <p><small>폐기 대상은 유효기한이 지났지만 아직 폐기하지 않은, 잔량이 남은 로트입니다.</small></p>
 
     <table>
         <thead>
@@ -32,6 +35,7 @@
             <th>최소 수량</th>
             <th>상태</th>
             <th>임박 로트(로트 ID: 수량, 유효기한)</th>
+            <th>폐기 대상 로트(로트 ID: 수량, 유효기한)</th>
         </tr>
         </thead>
         <tbody>
@@ -51,9 +55,15 @@
                     <li th:each="lot : ${item.expiringSoon}" th:text="|${lot.lotId}: ${lot.quantity}, ${lot.expiryDate}|"></li>
                 </ul>
             </td>
+            <td>
+                <span th:if="${item.expired.isEmpty()}">-</span>
+                <ul th:unless="${item.expired.isEmpty()}" class="error">
+                    <li th:each="lot : ${item.expired}" th:text="|${lot.lotId}: ${lot.quantity}, ${lot.expiryDate}|"></li>
+                </ul>
+            </td>
         </tr>
         <tr th:if="${items.isEmpty()}">
-            <td colspan="6">비치 기준이나 입고된 약품이 없습니다.</td>
+            <td colspan="7">비치 기준이나 입고된 약품이 없습니다.</td>
         </tr>
         </tbody>
     </table>

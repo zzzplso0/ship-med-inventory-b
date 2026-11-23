@@ -69,6 +69,23 @@ class StockInventoryServiceTest {
 		}
 
 		@Test
+		@DisplayName("오늘을 넘겨 폐기 대상을 조회하고, 약품별로 붙이며 없는 약품은 빈 목록이다")
+		void givenRowsAndExpiredLot_whenGetInventory_thenAttachesExpiredByMedication() {
+			given(shipRepository.existsById(SHIP_ID)).willReturn(true);
+			given(stockInventoryQueryMapper.selectInventory(SHIP_ID, TODAY)).willReturn(List.of(
+					new StockInventoryRow(1L, "모르핀", "앰플", 0, true, 5, true),
+					new StockInventoryRow(2L, "아스피린", "정", 10, false, null, null)));
+			given(stockInventoryQueryMapper.selectExpiredLots(SHIP_ID, TODAY)).willReturn(List.of(
+					new StockExpiringLotRow(1L, 200L, 3, LocalDate.parse("2026-07-01"))));
+
+			List<StockInventoryDto> result = stockInventoryService.getInventory(SHIP_ID);
+
+			assertThat(result.get(0).expired())
+					.containsExactly(new StockExpiringLotDto(200L, 3, LocalDate.parse("2026-07-01")));
+			assertThat(result.get(1).expired()).isEmpty();
+		}
+
+		@Test
 		@DisplayName("선박이 없으면 ShipNotFoundException이고 조회하지 않는다")
 		void givenMissingShip_whenGetInventory_thenThrowsShipNotFound() {
 			given(shipRepository.existsById(SHIP_ID)).willReturn(false);
