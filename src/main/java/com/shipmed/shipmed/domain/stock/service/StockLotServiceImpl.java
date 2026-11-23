@@ -4,26 +4,38 @@ import com.shipmed.shipmed.domain.medication.entity.Medication;
 import com.shipmed.shipmed.domain.medication.exception.MedicationNotFoundException;
 import com.shipmed.shipmed.domain.medication.repository.MedicationRepository;
 import com.shipmed.shipmed.domain.ship.entity.Ship;
+import com.shipmed.shipmed.domain.ship.exception.ShipNotFoundException;
 import com.shipmed.shipmed.domain.ship.repository.ShipRepository;
 import com.shipmed.shipmed.domain.stock.dto.StockLotMapper;
 import com.shipmed.shipmed.domain.stock.dto.request.StockLotCreateRequest;
+import com.shipmed.shipmed.domain.stock.dto.request.StockLotDisposalRequest;
+import com.shipmed.shipmed.domain.stock.dto.request.StockLotListQuery;
+import com.shipmed.shipmed.domain.stock.dto.response.StockLotDisposalDto;
 import com.shipmed.shipmed.domain.stock.dto.response.StockLotDto;
+import com.shipmed.shipmed.domain.stock.dto.response.StockLotListDto;
+import com.shipmed.shipmed.domain.stock.entity.LotStatus;
 import com.shipmed.shipmed.domain.stock.entity.StockLot;
 import com.shipmed.shipmed.domain.stock.exception.StockLotDuplicateException;
 import com.shipmed.shipmed.domain.stock.exception.StockLotExpiredOnArrivalException;
+import com.shipmed.shipmed.domain.stock.exception.StockLotNotFoundException;
 import com.shipmed.shipmed.domain.stock.exception.StockLotReceivedAtInFutureException;
+import com.shipmed.shipmed.domain.stock.repository.StockLotQueryMapper;
 import com.shipmed.shipmed.domain.stock.repository.StockLotRepository;
 import com.shipmed.shipmed.domain.user.entity.User;
 import com.shipmed.shipmed.domain.user.repository.UserRepository;
+import com.shipmed.shipmed.global.request.PageQuery;
+import com.shipmed.shipmed.global.response.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -38,6 +50,7 @@ public class StockLotServiceImpl implements StockLotService {
     private final UserRepository userRepository;
     private final StockLotMapper stockLotMapper;
     private final Clock clock;
+    private final StockLotQueryMapper stockLotQueryMapper;
 
     @Transactional
     @Override
@@ -82,5 +95,40 @@ public class StockLotServiceImpl implements StockLotService {
         }
 
         return stockLotMapper.toDto(stockLot);
+    }
+
+    @Override
+    public PageResponse<StockLotListDto> getLots(Long shipId, StockLotListQuery stockLotListQuery, PageQuery pageQuery) {
+        boolean exists = shipRepository.existsById(shipId);
+
+        if (!exists) {
+            throw new ShipNotFoundException();
+        }
+
+        LocalDate today = LocalDate.now(clock);
+        int offset = pageQuery.page() * pageQuery.size();
+
+        List<StockLotListDto> stockLotListDtos = stockLotQueryMapper.selectLots(shipId, stockLotListQuery, today, offset, pageQuery.size());
+
+        long total = stockLotQueryMapper.countLots(shipId, stockLotListQuery);
+
+        return PageResponse.from(new PageImpl<>(stockLotListDtos, pageQuery.toPageable(), total));
+    }
+
+    @Transactional
+    @Override
+    public StockLotDisposalDto discard(Long shipId, Long lotId, StockLotDisposalRequest stockLotDisposalRequest, Long userId) {
+        StockLot stockLot = stockLotRepository.findByIdAndShipId(lotId, shipId)
+                .orElseThrow(StockLotNotFoundException::new);
+
+        if (stockLot.getStatus() == LotStatus.DISCARDED) {
+            return stockLotMapper.toDtoDisposal(stockLot);
+        }
+
+        User user = userRepository.getReferenceById(userId);
+
+        stockLot.discard(user, stockLotDisposalRequest.reason(), Instant.now(clock));
+
+        return stockLotMapper.toDtoDisposal(stockLot);
     }
 }

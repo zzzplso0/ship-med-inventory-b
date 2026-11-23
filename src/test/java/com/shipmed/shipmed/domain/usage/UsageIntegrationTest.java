@@ -47,6 +47,7 @@ import java.util.concurrent.Future;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -265,6 +266,31 @@ class UsageIntegrationTest {
 				.andExpect(jsonPath("$.status").value("CANCELLED"));
 
 		assertThat(remaining(lot)).isEqualTo(100);
+	}
+
+	// requirements 5장 "폐기 로트 취소 복원": 사용 = 로트B 30 + 로트A 10, 이후 로트B 폐기.
+	@Test
+	@DisplayName("폐기한 로트가 걸린 사용을 취소하면 그 로트로 복원하고, 복원분은 가용 재고에 넣지 않는다")
+	void givenUsageWithDiscardedLot_whenCancel_thenRestoresToDiscardedLot() throws Exception {
+		StockLot lotA = saveLot("A", 100, "2027-01-31");
+		StockLot lotB = saveLot("B", 30, "2026-08-31");
+		Long usageId = use(officer1, KEY, 40);
+		mockMvc.perform(post("/api/ships/" + ship.getId() + "/lots/" + lotB.getId() + "/disposal")
+						.contentType(MediaType.APPLICATION_JSON).content("""
+								{"reason":"파손"}
+								""")
+						.with(user(CustomUserDetails.from(officer1))))
+				.andExpect(status().isOk());
+
+		mockMvc.perform(cancelRequest(usageId, REASON, officer1))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("CANCELLED"));
+
+		assertThat(remaining(lotA)).isEqualTo(100);
+		assertThat(remaining(lotB)).isEqualTo(30);
+		mockMvc.perform(get("/api/ships/" + ship.getId() + "/inventory").with(user(CustomUserDetails.from(officer1))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].available").value(100));
 	}
 
 	@Test

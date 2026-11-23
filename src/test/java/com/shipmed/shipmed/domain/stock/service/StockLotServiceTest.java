@@ -3,17 +3,25 @@ package com.shipmed.shipmed.domain.stock.service;
 import com.shipmed.shipmed.domain.medication.entity.Medication;
 import com.shipmed.shipmed.domain.medication.repository.MedicationRepository;
 import com.shipmed.shipmed.domain.ship.entity.Ship;
+import com.shipmed.shipmed.domain.ship.exception.ShipNotFoundException;
 import com.shipmed.shipmed.domain.ship.repository.ShipRepository;
 import com.shipmed.shipmed.domain.stock.dto.StockLotMapperImpl;
 import com.shipmed.shipmed.domain.stock.dto.request.StockLotCreateRequest;
+import com.shipmed.shipmed.domain.stock.dto.request.StockLotDisposalRequest;
+import com.shipmed.shipmed.domain.stock.dto.request.StockLotListQuery;
+import com.shipmed.shipmed.domain.stock.dto.response.StockLotDisposalDto;
+import com.shipmed.shipmed.domain.stock.entity.LotStatus;
 import com.shipmed.shipmed.domain.stock.entity.StockLot;
 import com.shipmed.shipmed.domain.stock.exception.StockLotDuplicateException;
 import com.shipmed.shipmed.domain.stock.exception.StockLotExpiredOnArrivalException;
+import com.shipmed.shipmed.domain.stock.exception.StockLotNotFoundException;
 import com.shipmed.shipmed.domain.stock.exception.StockLotReceivedAtInFutureException;
+import com.shipmed.shipmed.domain.stock.repository.StockLotQueryMapper;
 import com.shipmed.shipmed.domain.stock.repository.StockLotRepository;
 import com.shipmed.shipmed.domain.user.entity.Role;
 import com.shipmed.shipmed.domain.user.entity.User;
 import com.shipmed.shipmed.domain.user.repository.UserRepository;
+import com.shipmed.shipmed.global.request.PageQuery;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,9 +42,11 @@ import static com.shipmed.shipmed.FixedClockConfiguration.FIXED_CLOCK;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class StockLotServiceTest {
@@ -59,23 +69,29 @@ class StockLotServiceTest {
 	@Mock
 	private UserRepository userRepository;
 
+	@Mock
+	private StockLotQueryMapper stockLotQueryMapper;
+
 	private StockLotService stockLotService;
 
 	@BeforeEach
 	void setUp() {
 		stockLotService = new StockLotServiceImpl(
 				stockLotRepository, shipRepository, medicationRepository, userRepository,
-				new StockLotMapperImpl(), FIXED_CLOCK);
-
-		Medication medication = new Medication("약품", null, "정");
-		ReflectionTestUtils.setField(medication, "id", MEDICATION_ID);
-
-		given(medicationRepository.findById(MEDICATION_ID)).willReturn(Optional.of(medication));
+				new StockLotMapperImpl(), FIXED_CLOCK, stockLotQueryMapper);
 	}
 
 	@Nested
 	@DisplayName("재고 입고")
 	class Create {
+
+		@BeforeEach
+		void setUp() {
+			Medication medication = new Medication("약품", null, "정");
+			ReflectionTestUtils.setField(medication, "id", MEDICATION_ID);
+
+			given(medicationRepository.findById(MEDICATION_ID)).willReturn(Optional.of(medication));
+		}
 		@Test
 		@DisplayName("만료일이 오늘이고 입고 시각이 현재면 입고자를 넣어 저장한다")
 		void givenBoundaryDates_whenCreate_thenSavesWithReceiver() {
@@ -132,6 +148,83 @@ class StockLotServiceTest {
 		private DataIntegrityViolationException violation(String constraintName) {
 			return new DataIntegrityViolationException(
 					"위반", new ConstraintViolationException("위반", null, constraintName));
+		}
+	}
+
+	@Nested
+	@DisplayName("로트 목록")
+	class GetLots {
+
+		@Test
+		@DisplayName("선박이 없으면 SHIP_NOT_FOUND이고 목록을 조회하지 않는다")
+		void givenNoShip_whenGetLots_thenThrowsShipNotFound() {
+			given(shipRepository.existsById(SHIP_ID)).willReturn(false);
+
+			assertThatThrownBy(() -> stockLotService.getLots(SHIP_ID, new StockLotListQuery(null, null), new PageQuery(null, null)))
+					.isInstanceOf(ShipNotFoundException.class);
+			verifyNoInteractions(stockLotQueryMapper);
+		}
+	}
+
+	@Nested
+	@DisplayName("로트 폐기")
+	class Discard {
+
+		private static final Long LOT_ID = 4L;
+
+		private StockLot lot;
+
+		@BeforeEach
+		void setUp() {
+			User receiver = new User("officer_1", "의무사관", "encoded", Role.MEDICAL_OFFICER, new Ship("선박"));
+			lot = new StockLot("L-001", 10, TODAY.plusDays(30), NOW, receiver, new Ship("선박"),
+					new Medication("약품", null, "정"));
+			ReflectionTestUtils.setField(lot, "id", LOT_ID);
+		}
+
+		@Test
+		@DisplayName("정상 로트면 상태를 DISCARDED로 바꾸고 폐기 시각·폐기자·사유를 기록하며 잔량은 그대로다")
+		void givenActiveLot_whenDiscard_thenRecordsDisposal() {
+			User discarder = new User("officer_2", "폐기자", "encoded", Role.MEDICAL_OFFICER, new Ship("선박"));
+			given(stockLotRepository.findByIdAndShipId(LOT_ID, SHIP_ID)).willReturn(Optional.of(lot));
+			given(userRepository.getReferenceById(USER_ID)).willReturn(discarder);
+
+			StockLotDisposalDto result = discard("파손");
+
+			assertThat(result.lotId()).isEqualTo(LOT_ID);
+			assertThat(result.status()).isEqualTo(LotStatus.DISCARDED);
+			assertThat(result.discardedAt()).isEqualTo(NOW);
+			assertThat(result.discardedBy()).isEqualTo("폐기자");
+			assertThat(result.discardedReason()).isEqualTo("파손");
+			assertThat(lot.getRemainingQuantity()).isEqualTo(10);
+		}
+
+		@Test
+		@DisplayName("이미 폐기된 로트면 처음 폐기 결과를 돌려주고 사유·폐기자를 바꾸지 않는다")
+		void givenDiscardedLot_whenDiscard_thenReturnsExistingDisposal() {
+			User firstDiscarder = new User("officer_2", "처음 폐기자", "encoded", Role.MEDICAL_OFFICER, new Ship("선박"));
+			Instant firstDiscardedAt = NOW.minusSeconds(3600);
+			lot.discard(firstDiscarder, "파손", firstDiscardedAt);
+			given(stockLotRepository.findByIdAndShipId(LOT_ID, SHIP_ID)).willReturn(Optional.of(lot));
+
+			StockLotDisposalDto result = discard("다른 사유");
+
+			assertThat(result.discardedReason()).isEqualTo("파손");
+			assertThat(result.discardedBy()).isEqualTo("처음 폐기자");
+			assertThat(result.discardedAt()).isEqualTo(firstDiscardedAt);
+			verify(userRepository, never()).getReferenceById(anyLong());
+		}
+
+		@Test
+		@DisplayName("그 선박에 없는 로트면 LOT_NOT_FOUND")
+		void givenNoLot_whenDiscard_thenThrowsLotNotFound() {
+			given(stockLotRepository.findByIdAndShipId(LOT_ID, SHIP_ID)).willReturn(Optional.empty());
+
+			assertThatThrownBy(() -> discard("파손")).isInstanceOf(StockLotNotFoundException.class);
+		}
+
+		private StockLotDisposalDto discard(String reason) {
+			return stockLotService.discard(SHIP_ID, LOT_ID, new StockLotDisposalRequest(reason), USER_ID);
 		}
 	}
 }

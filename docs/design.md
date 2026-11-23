@@ -121,6 +121,7 @@ CREATE TABLE tb_usage_lot_allocation (              -- 사용-로트 분배(appe
 CREATE INDEX idx_alloc_lot ON tb_usage_lot_allocation (lot_id);
 CREATE INDEX idx_usage_ship_med  ON tb_usage_record (ship_id, medication_id);
 CREATE INDEX idx_usage_user_time ON tb_usage_record (user_id, used_at);
+CREATE INDEX idx_usage_ship_time ON tb_usage_record (ship_id, used_at);  -- V2. 사용 이력의 선박별 시간순 조회
 CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건과 일치하는 부분 인덱스
   ON tb_stock_lot (ship_id, medication_id, expiry_date, received_at, id)
   WHERE status = 'ACTIVE';
@@ -188,10 +189,13 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 | POST   | `/api/ships/{shipId}/usages`                      | 약품 사용 (FEFO 차감)  | 의무사관                    | 201 / 409 재고부족·키 재사용 / 200 멱등      |
 | POST   | `/api/usages/{usageId}/cancellation`              | 사용 취소 (로트 복원)  | 의무사관                    | 200 / 200 멱등                               |
 | GET    | `/api/ships/{shipId}/inventory`                   | 재고 현황(부족·임박)   | 관리자, 의무사관(소속 선박) | 200                                          |
+| GET    | `/api/ships/{shipId}/lots`                        | 로트 목록              | 관리자, 의무사관(소속 선박) | 200 / 400 필터                               |
+| POST   | `/api/ships/{shipId}/lots/{lotId}/disposal`       | 로트 폐기              | 의무사관                    | 200 / 200 멱등 / 400 사유 / 404 로트 없음    |
+| GET    | `/api/ships/{shipId}/usages`                      | 사용 이력              | 관리자, 의무사관(소속 선박) | 200 / 400 필터                               |
 
 **목록 조회 공통**
 
-`GET /api/users`, `GET /api/ships`, `GET /api/medications`, `GET /api/ships/{shipId}/requirements`는 같은 페이지 응답을 쓴다. 재고 현황은 집계 결과라 적용하지 않는다. 값의 범위와 기본값은 `requirements.md` 4장.
+`GET /api/users`, `GET /api/ships`, `GET /api/medications`, `GET /api/ships/{shipId}/requirements`, `GET /api/ships/{shipId}/lots`, `GET /api/ships/{shipId}/usages`는 같은 페이지 응답을 쓴다. 재고 현황은 집계 결과라 적용하지 않는다. 값의 범위와 기본값은 `requirements.md` 4장.
 
 ```markdown
 요청:
@@ -200,7 +204,8 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 	{ content:[ ... ], page, size, totalElements, totalPages, hasNext }
 ```
 
-- 조회는 JPA로 한다. MyBatis는 재고 현황 같은 집계와 복잡한 조회에만 쓴다.
+- 조회는 JPA로 한다. MyBatis는 재고 현황 같은 집계와 복잡한 조회에만 쓴다. 로트 목록과 사용 이력은 선택 필터와 여러 테이블 조인이 있어 MyBatis로 한다.
+- 로트 목록(FEFO)과 사용 이력(`used_at`·`id` 내림차순)은 `PageQuery`의 `id` 오름차순 대신 각자의 정렬을 쓴다. `page`, `size` 검증은 같다.
 - 범위를 벗어난 값을 조용히 보정하지 않도록 `Pageable` 자동 변환 대신 `page`, `size`를 `PageQuery`와 `@Valid @ModelAttribute`로 받아 검증한다. 기본값, 범위, 정렬은 `PageQuery`에 모은다.
 - Spring의 `Page`를 그대로 직렬화하지 않고 전용 `PageResponse`로 응답한다.
 - 비치 기준 목록은 약품 이름이 필요하므로 fetch join으로 N+1을 막는다.
@@ -352,15 +357,58 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 	{ error:REQUIREMENT_CONFLICT } // 신규 요청이 겹침 (uq_requirement)
 ```
 
-- POST `/api/lots/{lotId}/disposal` — 로트 폐기 **(이후 단계, MVP 미포함)**
+- GET `/api/ships/{shipId}/lots` — 로트 목록
 
 ```markdown
 요청:
-	{ reason }
+	?medicationId=&status=ACTIVE|DISCARDED&page=0&size=20 // 필터는 모두 선택
 200:
-	{ lotId, status:"DISCARDED", discardedAt, discardedBy }
-404: // 200 이미 폐기됨 → 멱등
+	페이지 응답(3.1), content:[ { lotId, medicationId, medicationName, unit, lotNumber, initialQuantity, remainingQuantity,
+	                              expiryDate, expired, status, receivedAt, receivedBy, discardedAt, discardedBy, discardedReason }, ... ]
+	// FEFO(expiry_date → received_at → id) 정렬. expired는 조회 시점(Clock) 계산. receivedBy·discardedBy는 사용자 name
+400:
+	잘못된 status·medicationId 형식 // page·size 범위
+404:
+	ship 없음 (관리자. 의무사관은 소속 선박 판정에서 403)
 ```
+
+- POST `/api/ships/{shipId}/lots/{lotId}/disposal` — 로트 폐기
+
+```markdown
+요청:
+	{ reason } // 필수, 최대 255자
+200:
+	{ lotId, status:"DISCARDED", discardedAt, discardedBy, discardedReason } // discardedBy는 폐기자 name
+400:
+	reason 없음 / 빈 값 / 공백만 / 255자 초과
+401:
+	로그인 안 함
+403:
+	관리자 / 소속이 아닌 선박
+404:
+	{ error:LOT_NOT_FOUND } // 그 선박에 없는 로트(다른 선박의 로트 포함)
+200:
+	이미 폐기됨 → 멱등(기존 폐기 결과 반환)
+```
+
+- GET `/api/ships/{shipId}/usages` — 사용 이력
+
+```markdown
+요청:
+	?from=2026-07-01&to=2026-07-10&medicationId=&status=ACTIVE|CANCELLED&page=0&size=20
+	// 필터는 모두 선택. from·to는 UTC 날짜, 양 끝 포함(used_at >= from 00:00Z, used_at < to+1일 00:00Z)
+200:
+	페이지 응답(3.1), content:[ { usageId, medicationId, medicationName, unit, quantity, status, usedAt, userId, userName,
+	                              cancelledAt, cancelledBy, cancelReason, allocations:[ {lotId, lotNumber, quantity}, ... ] }, ... ]
+	// used_at 내림차순, id 내림차순. userName·cancelledBy는 사용자 name
+400:
+	from > to // 잘못된 날짜·status·medicationId 형식 // page·size 범위
+404:
+	ship 없음 (관리자. 의무사관은 소속 선박 판정에서 403)
+```
+
+- 사용 이력은 페이지 대상 사용 기록과 전체 건수를 먼저 조회하고, 그 기록들의 allocation을 `usage_id IN (...)` 한 번으로 조회해 합친다. 기록과 allocation을 한 쿼리로 조인하면 페이지가 allocation 행 기준으로 잘리기 때문.
+- 없는 `medicationId`로 거르면 오류 없이 빈 결과를 준다. 필터 값이라 대상 존재(404) 판정을 하지 않는다.
 
 - GET `/api/medications`
 
@@ -416,6 +464,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 | 403  | `ACCESS_DENIED`                                                 | 역할에 없는 기능, 소속이 아닌 선박 요청                        |
 | 404  | `RESOURCE_NOT_FOUND`                                            | 없는 경로. 없는 대상은 도메인별 코드(`SHIP_NOT_FOUND` 등) 사용 |
 | 404  | `SHIP_NOT_FOUND`, `MEDICATION_NOT_FOUND`                        | 없는 선박 또는 약품                                            |
+| 404  | `LOT_NOT_FOUND`                                                 | 그 선박에 없는 로트                                            |
 | 405  | `METHOD_NOT_ALLOWED`                                            | 지원하지 않는 HTTP 메서드                                      |
 | 409  | `DUPLICATE_LOT`, `INSUFFICIENT_STOCK`, `IDEMPOTENCY_KEY_REUSED` | 비즈니스 충돌                                                  |
 | 409  | `DUPLICATE_LOGIN_ID`                                            | 로그인 ID 중복                                                 |
@@ -519,12 +568,32 @@ ON uq_usage_idempotency 위반:
 커밋 → 200 반환
 ```
 
+### 3. 로트 폐기
+
+```markdown
+함수 로트폐기(ship_id, lot_id, 현재사용자, reason):
+트랜잭션 시작:
+
+    # 0. 대상 조회 + 잠금. 경로의 선박에 속한 로트만 찾음
+    로트 = SELECT * FROM tb_stock_lot WHERE id=lot_id AND ship_id=ship_id FOR UPDATE
+    IF 없음: 롤백 → 404 LOT_NOT_FOUND
+
+    # 1. 이중 폐기 방어
+    IF status == 'DISCARDED': 기존 결과 반환; 종료
+
+    # 2. 상태 전이 (잔량은 그대로, 삭제 아님)
+    로트.status='DISCARDED'; discarded_at=now(Clock); discarded_by=현재사용자.id; discarded_reason=?
+
+커밋 → 200 반환
+```
+
 ---
 
 ## 5. 동시성, 정합성 전략
 
 - 차감, 복원 대상 로트를 `SELECT ... FOR UPDATE`로 잠근 뒤 트랜잭션 안에서 처리한다.
 - 사용 기록 요청은 `Idempotency-Key`로 식별하고 `UNIQUE(user_id, idempotency_key)`로 재시도 중복 차감을 차단한다.
+- 로트 폐기는 로트 한 행만 잠그므로 차감·복원의 `id` 오름차순 잠금과 데드락이 생기지 않는다. 사용 차감이 폐기 중인 로트의 잠금을 기다렸다면, 잠금을 얻은 뒤 PostgreSQL이 `status='ACTIVE'` 조건을 다시 평가해 그 로트를 차감 대상에서 뺀다(READ COMMITTED).
 - 같은 키 동시 요청은 로트 잠금 뒤 기존 기록을 다시 확인한다(4.1의 1-1단계). 그래도 UNIQUE 위반이 나면 롤백 후 새 트랜잭션에서 기존 기록을 조회해 반환한다(4.1의 6단계).
 - 계정 등록은 먼저 `loginId` 중복을 확인해 409로 응답한다. 동시 요청이 확인을 함께 통과하면 늦은 쪽의 `uq_user_login` 위반을 같은 409로 변환한다.
     - `saveAndFlush`로 위반을 바로 일으키고, 제약 이름이 `uq_user_login`일 때만 변환한다. 다른 제약 위반은 그대로 던진다.
@@ -542,22 +611,30 @@ ON uq_usage_idempotency 위반:
 
 - 화면 경로는 API 경로에서 `/api`를 뺀 구조를 따른다. 목록 화면에 등록 폼을 함께 둔다.
 
-| 메서드   | 경로                             | 화면                        | 권한                                    |
-|----------|----------------------------------|-----------------------------|-----------------------------------------|
-| GET/POST | `/login`                         | 로그인                      | 누구나                                  |
-| POST     | `/logout`                        | 로그아웃                    | 로그인                                  |
-| GET      | `/`                              | 역할별 첫 화면으로 redirect | 로그인                                  |
-| GET/POST | `/users`                         | 계정 목록·등록              | 관리자                                  |
-| GET/POST | `/ships`                         | 선박 목록·등록              | 목록 로그인, 등록 관리자                |
-| GET/POST | `/medications`                   | 약품 목록·등록              | 목록 로그인, 등록 관리자                |
-| GET/POST | `/ships/{shipId}/requirements`   | 비치 기준 목록·설정         | 목록 관리자·의무사관(소속), 설정 관리자 |
-| GET/POST | `/ships/{shipId}/lots`           | 입고                        | 의무사관                                |
-| GET/POST | `/ships/{shipId}/usages`         | 사용                        | 의무사관                                |
-| GET      | `/ships/{shipId}/usages/result`  | 사용 결과(취소 폼)          | 의무사관                                |
-| POST     | `/usages/{usageId}/cancellation` | 사용 취소                   | 의무사관                                |
-| GET      | `/ships/{shipId}/inventory`      | 재고 현황                   | 관리자, 의무사관(소속 선박)             |
-| GET      | `/inventory?shipId=`             | 선박 선택 → 재고 현황 redirect | 관리자                                  |
+| 메서드   | 경로                                            | 화면                                 | 권한                                    |
+|----------|-------------------------------------------------|--------------------------------------|-----------------------------------------|
+| GET/POST | `/login`                                        | 로그인                               | 누구나                                  |
+| POST     | `/logout`                                       | 로그아웃                             | 로그인                                  |
+| GET      | `/`                                             | 역할별 첫 화면으로 redirect          | 로그인                                  |
+| GET/POST | `/users`                                        | 계정 목록·등록                       | 관리자                                  |
+| GET/POST | `/ships`                                        | 선박 목록·등록                       | 목록 로그인, 등록 관리자                |
+| GET/POST | `/medications`                                  | 약품 목록·등록                       | 목록 로그인, 등록 관리자                |
+| GET/POST | `/ships/{shipId}/requirements`                  | 비치 기준 목록·설정                  | 목록 관리자·의무사관(소속), 설정 관리자 |
+| GET/POST | `/ships/{shipId}/lots`                          | 입고                                 | 의무사관                                |
+| GET/POST | `/ships/{shipId}/usages`                        | 사용                                 | 의무사관                                |
+| GET      | `/ships/{shipId}/usages/result`                 | 사용 결과(취소 폼)                   | 의무사관                                |
+| POST     | `/usages/{usageId}/cancellation`                | 사용 취소                            | 의무사관                                |
+| GET      | `/ships/{shipId}/inventory`                     | 재고 현황                            | 관리자, 의무사관(소속 선박)             |
+| GET      | `/inventory?shipId=`                            | 선박 선택 → 재고 현황 redirect       | 관리자                                  |
+| GET      | `/ships/{shipId}/lots/list`                     | 로트 목록(폐기 폼)                   | 관리자, 의무사관(소속 선박)             |
+| POST     | `/ships/{shipId}/lots/{lotId}/disposal`         | 로트 폐기                            | 의무사관                                |
+| GET      | `/ships/{shipId}/usages/history`                | 사용 이력(선택한 기록 상세, 취소 폼) | 관리자, 의무사관(소속 선박)             |
+| POST     | `/ships/{shipId}/usages/{usageId}/cancellation` | 이력 화면의 사용 취소                | 의무사관                                |
 
+- 로트 목록과 사용 이력은 입고(`/ships/{shipId}/lots`)·사용(`/ships/{shipId}/usages`) 화면 경로와 겹치지 않게 하위 경로에 둔다.
+- 관리자는 재고 현황 화면의 링크로 그 선박의 로트 목록·사용 이력에 들어간다. 의무사관은 메뉴로 들어간다.
+- 사용 이력의 상세는 `selected=usageId` 쿼리 파라미터로 고르고, 현재 페이지의 조회 결과에서 꺼내 그린다. 사용 기록 한 건을 읽는 API는 만들지 않는다.
+- 이력 화면의 취소는 기존 화면 취소(`/usages/{usageId}/cancellation`)와 같은 서비스를 쓰고, 돌아갈 이력 화면을 알 수 있게 `shipId`가 있는 경로로 받는다.
 - 목록 화면의 `page`, `size`는 API와 같이 `PageQuery`로 받는다.
 - 비치 기준 설정은 API의 PUT 대신 폼 POST로 받고, `medicationId`는 폼 값으로 보낸다.
 - 계정의 소속 선박과 비치 기준의 약품은 ID를 숫자로 입력한다. 선택 목록은 페이지 크기(최대 100) 때문에 전체를 담지 못한다.
@@ -576,6 +653,7 @@ ON uq_usage_idempotency 위반:
 
 - 로그인은 API 로그인과 같은 방식(1장 `AuthenticationManager`, 세션 ID 교체, `SecurityContext` 저장)을 화면 컨트롤러에서도 쓴다. 실패하면 로그인 화면에 메시지를 보여 준다. 세션은 화면과 API가 함께 쓴다.
 - 로그아웃은 CSRF 토큰이 있는 POST로만 받는다.
+- 화면 역할 규칙에서 `/ships/*/usages/**`는 의무사관 전용이므로, 관리자도 보는 GET `/ships/*/usages/history`는 그보다 앞에 둔다. GET `/ships/*/lots/list`는 로그인한 사용자 모두, POST `/ships/*/lots/*/disposal`은 의무사관.
 
 ### 3. 오류 처리
 
@@ -583,6 +661,7 @@ ON uq_usage_idempotency 위반:
     - `GlobalExceptionHandler`의 적용 대상을 `@RestController`로 좁히지 않는다. 없는 경로의 `NoResourceFoundException`은 컨트롤러 밖에서 나므로, 좁히면 `/api`의 404 `RESOURCE_NOT_FOUND` 응답이 사라진다.
     - 같은 이유로 화면의 없는 경로(예: `/foo`)는 JSON 404로 응답한다. 화면의 메뉴와 redirect는 없는 경로로 보내지 않으므로 주소를 직접 입력할 때만 생긴다.
 - 형식 검증(400): `@Valid`와 `BindingResult`로 필드 옆에 메시지를 보여 주고 입력값을 유지한다.
+- 목록 조회 필터의 오류(잘못된 상태·날짜 값, 시작일이 종료일보다 늦음, `page`·`size` 범위)는 400 오류 화면으로 보여 준다. 필터는 GET 쿼리 파라미터라 입력 폼처럼 다시 그리지 않는다.
 - 규칙 검증(400)과 비즈니스 충돌(409): 컨트롤러가 `BusinessException`을 받아 같은 입력 화면에 `ErrorCode` 메시지를 보여 준다. 재고 부족은 가용 수량을 함께 보여 준다.
 - 403, 404, 500: 오류 화면. 500 화면에 예외 정보를 넣지 않는다.
 
@@ -594,3 +673,6 @@ ON uq_usage_idempotency 위반:
 - 취소에 성공하면 복원 내역을 flash attribute로 넘기고 사용 화면으로 redirect한다. 취소 사유 검증에 실패하면 결과 데이터 없이 취소 폼만 다시 보여 준다.
 - 입고 폼의 유효기한은 `date`, 입고 시각은 `datetime-local` 입력(분 단위)으로 받고 입고 시각은 UTC로 본다. 기본값은 주입한 `Clock`의 현재 시각.
 - 사용 폼은 오류로 다시 그릴 때도 새 `Idempotency-Key`를 만든다. 오류면 기록이 생기지 않았으므로 안전하다.
+- 폐기에 성공하면 로트 목록으로 redirect하고 완료 메시지를 보여 준다. 사유 검증에 실패하면 로트 목록으로 redirect하고 해당 로트 옆에 메시지를 보여 준다(flash). 필터·페이지는 유지하지 않는다.
+- 이력 화면에서 취소에 성공하면 `selected`를 그 기록으로 둔 이력 화면으로 redirect하고 완료 메시지를 보여 준다. 사유 검증에 실패해도 같은 화면으로 redirect하고 메시지를 보여 준다(flash).
+- 이 redirect는 취소 전의 필터와 페이지(`from`, `to`, `medicationId`, `status`, `page`, `size`)를 유지한다. 상세는 현재 페이지의 조회 결과에서 꺼내므로, 조건이 바뀌면 취소한 기록이 결과에서 빠져 상세가 사라지기 때문. 취소 폼이 현재 조회 조건을 함께 보낸다.

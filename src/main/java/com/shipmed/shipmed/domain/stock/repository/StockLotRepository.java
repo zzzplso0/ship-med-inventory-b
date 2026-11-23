@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface StockLotRepository extends JpaRepository<StockLot, Long> {
@@ -40,4 +41,7 @@ public interface StockLotRepository extends JpaRepository<StockLot, Long> {
         ORDER BY s.id
     """)
     List<StockLot> findAllByIdForUpdate(@Param("ids") List<Long> ids);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<StockLot> findByIdAndShipId(Long lotId, Long shipId);
 }

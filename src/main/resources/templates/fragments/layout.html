@@ -31,7 +31,9 @@
     <nav sec:authorize="hasRole('MEDICAL_OFFICER')" th:with="shipId=${#authentication.principal.shipId}">
         <a th:href="@{/ships/{id}/inventory(id=${shipId})}">재고 현황</a>
         <a th:href="@{/ships/{id}/lots(id=${shipId})}">입고</a>
+        <a th:href="@{/ships/{id}/lots/list(id=${shipId})}">로트 목록</a>
         <a th:href="@{/ships/{id}/usages(id=${shipId})}">사용</a>
+        <a th:href="@{/ships/{id}/usages/history(id=${shipId})}">사용 이력</a>
         <a th:href="@{/ships/{id}/requirements(id=${shipId})}">비치 기준</a>
         <a th:href="@{/medications}">약품</a>
     </nav>

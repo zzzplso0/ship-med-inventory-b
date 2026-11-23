@@ -2,10 +2,14 @@ package com.shipmed.shipmed.domain.usage.controller;
 
 import com.shipmed.shipmed.domain.usage.dto.request.UsageCancelRequest;
 import com.shipmed.shipmed.domain.usage.dto.request.UsageCreateRequest;
+import com.shipmed.shipmed.domain.usage.dto.request.UsageHistoryQuery;
 import com.shipmed.shipmed.domain.usage.dto.response.UsageCancelDto;
 import com.shipmed.shipmed.domain.usage.dto.response.UsageDto;
+import com.shipmed.shipmed.domain.usage.dto.response.UsageHistoryDto;
 import com.shipmed.shipmed.domain.usage.dto.response.UsageResult;
 import com.shipmed.shipmed.domain.usage.service.UsageService;
+import com.shipmed.shipmed.global.request.PageQuery;
+import com.shipmed.shipmed.global.response.PageResponse;
 import com.shipmed.shipmed.global.security.principal.CustomUserDetails;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -50,5 +54,15 @@ public class UsageController {
         UsageCancelDto result = usageService.cancel(usageId, userId, usageCancelRequest);
 
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/ships/{shipId}/usages")
+    public ResponseEntity<PageResponse<UsageHistoryDto>> getHistory(@PathVariable Long shipId,
+                                                                    @Valid @ModelAttribute UsageHistoryQuery usageHistoryQuery,
+                                                                    @Valid @ModelAttribute PageQuery pageQuery)
+    {
+        PageResponse<UsageHistoryDto> response = usageService.getHistory(shipId, usageHistoryQuery, pageQuery);
+
+        return ResponseEntity.ok(response);
     }
 }

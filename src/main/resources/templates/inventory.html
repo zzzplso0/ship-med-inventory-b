@@ -12,6 +12,10 @@
         <button type="submit">보기</button>
         <small><a th:href="@{/ships}">선박 목록</a>에서 ID 확인</small>
     </form>
+    <p sec:authorize="hasRole('ADMIN')">
+        <a th:href="@{/ships/{id}/lots/list(id=${shipId})}">이 선박의 로트 목록</a>
+        <a th:href="@{/ships/{id}/usages/history(id=${shipId})}">이 선박의 사용 이력</a>
+    </p>
 
     <p>
         <span th:class="${shortageCount > 0} ? 'error'" th:text="|부족 ${shortageCount}개|"></span>,

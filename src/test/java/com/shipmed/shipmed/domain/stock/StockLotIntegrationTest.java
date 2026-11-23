@@ -6,6 +6,7 @@ import com.shipmed.shipmed.domain.medication.entity.Medication;
 import com.shipmed.shipmed.domain.medication.repository.MedicationRepository;
 import com.shipmed.shipmed.domain.ship.entity.Ship;
 import com.shipmed.shipmed.domain.ship.repository.ShipRepository;
+import com.shipmed.shipmed.domain.stock.entity.LotStatus;
 import com.shipmed.shipmed.domain.stock.entity.StockLot;
 import com.shipmed.shipmed.domain.stock.repository.StockLotRepository;
 import com.shipmed.shipmed.domain.user.entity.Role;
@@ -32,8 +33,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -163,6 +166,189 @@ class StockLotIntegrationTest {
 				.andExpect(status().isForbidden());
 
 		assertThat(stockLotRepository.count()).isZero();
+	}
+
+	// requirements 5장 "로트 목록": W(만료), X(폐기, Y와 유효기한 같고 먼저 입고), Y, 모르핀 Z.
+	@Test
+	@DisplayName("필터가 없으면 폐기·만료 로트를 포함해 FEFO 순으로 보여 주고 만료 여부를 계산한다")
+	void givenLots_whenGetLotsWithoutFilter_thenReturnsAllInFefoOrder() throws Exception {
+		saveListLots();
+
+		mockMvc.perform(get("/api/ships/" + ship.getId() + "/lots").with(user(officer)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[*].lotNumber").value(contains("W", "X", "Y", "Z")))
+				.andExpect(jsonPath("$.content[0].expired").value(true))
+				.andExpect(jsonPath("$.content[1].expired").value(false))
+				.andExpect(jsonPath("$.content[1].status").value("DISCARDED"))
+				.andExpect(jsonPath("$.content[1].discardedBy").value("의무사관"))
+				.andExpect(jsonPath("$.content[0].receivedBy").value("의무사관"))
+				.andExpect(jsonPath("$.content[3].medicationName").value("모르핀"))
+				.andExpect(jsonPath("$.totalElements").value(4));
+	}
+
+	@Test
+	@DisplayName("약품과 상태로 거르면 해당 로트만 보여 주고 건수도 같이 거른다")
+	void givenLots_whenGetLotsWithMedicationAndStatus_thenReturnsFiltered() throws Exception {
+		saveListLots();
+
+		mockMvc.perform(get("/api/ships/" + ship.getId() + "/lots").with(user(officer))
+						.param("medicationId", medication.getId().toString())
+						.param("status", "ACTIVE"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[*].lotNumber").value(contains("W", "Y")))
+				.andExpect(jsonPath("$.totalElements").value(2));
+	}
+
+	@Test
+	@DisplayName("잘못된 상태 값이면 400")
+	void givenInvalidStatus_whenGetLots_thenReturns400() throws Exception {
+		mockMvc.perform(get("/api/ships/" + ship.getId() + "/lots").with(user(officer)).param("status", "abc"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	@DisplayName("관리자는 선박의 로트 목록을 보고, 의무사관이 다른 선박을 조회하면 403")
+	void givenAdminAndOtherShip_whenGetLots_thenReturns200And403() throws Exception {
+		User admin = userRepository.save(new User("admin_1", "관리자", "encoded", Role.ADMIN, null));
+		Ship otherShip = shipRepository.save(new Ship("다른 선박"));
+
+		mockMvc.perform(get("/api/ships/" + ship.getId() + "/lots").with(user(CustomUserDetails.from(admin))))
+				.andExpect(status().isOk());
+		mockMvc.perform(get("/api/ships/" + otherShip.getId() + "/lots").with(user(officer)))
+				.andExpect(status().isForbidden());
+	}
+
+	// requirements 5장 "로트 폐기": 로트A(100, 만료 2027-01), 로트B(30, 만료 2026-08).
+	@Test
+	@DisplayName("로트를 폐기하면 200이고 폐기 정보가 기록되며, 재고 현황과 사용 차감에서 빠진다")
+	void givenTwoLots_whenDiscardLotB_thenExcludedFromInventoryAndUsage() throws Exception {
+		StockLot lotA = saveLot("A", 100, "2027-01-31");
+		StockLot lotB = saveLot("B", 30, "2026-08-15");
+
+		mockMvc.perform(disposalRequest(ship.getId(), lotB.getId(), "파손", officer))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.lotId").value(lotB.getId()))
+				.andExpect(jsonPath("$.status").value("DISCARDED"))
+				.andExpect(jsonPath("$.discardedAt").value("2026-07-22T00:00:00Z"))
+				.andExpect(jsonPath("$.discardedBy").value("의무사관"))
+				.andExpect(jsonPath("$.discardedReason").value("파손"));
+		// 재고 현황은 MyBatis라 조회 전에 DB에 반영한다.
+		stockLotRepository.flush();
+
+		mockMvc.perform(get("/api/ships/" + ship.getId() + "/inventory").with(user(officer)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].available").value(100))
+				.andExpect(jsonPath("$[0].expiringSoon.length()").value(0));
+
+		mockMvc.perform(post("/api/ships/" + ship.getId() + "/usages")
+						.header("Idempotency-Key", "key-1")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"medicationId":%d,"quantity":40}
+								""".formatted(medication.getId()))
+						.with(user(officer)))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.allocations.length()").value(1))
+				.andExpect(jsonPath("$.allocations[0].lotId").value(lotA.getId()));
+
+		assertThat(lotA.getRemainingQuantity()).isEqualTo(60);
+		assertThat(lotB.getRemainingQuantity()).isEqualTo(30);
+	}
+
+	@Test
+	@DisplayName("이미 폐기된 로트를 다른 사유로 다시 폐기하면 200이고 처음 폐기 결과를 돌려준다")
+	void givenDiscardedLot_whenDiscardAgain_thenReturnsFirstDisposal() throws Exception {
+		StockLot lot = saveLot("B", 30, "2026-08-15");
+		mockMvc.perform(disposalRequest(ship.getId(), lot.getId(), "파손", officer)).andExpect(status().isOk());
+
+		mockMvc.perform(disposalRequest(ship.getId(), lot.getId(), "다른 사유", officer))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("DISCARDED"))
+				.andExpect(jsonPath("$.discardedBy").value("의무사관"))
+				.andExpect(jsonPath("$.discardedReason").value("파손"));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"{}", "{\"reason\":\"\"}", "{\"reason\":\" \"}"})
+	@DisplayName("폐기 사유가 없거나 빈 문자열·공백만 있으면 400이고 fieldErrors에 reason이 있다")
+	void givenMissingOrBlankReason_whenDiscard_thenReturns400(String body) throws Exception {
+		StockLot lot = saveLot("B", 30, "2026-08-15");
+
+		mockMvc.perform(post("/api/ships/" + ship.getId() + "/lots/" + lot.getId() + "/disposal")
+						.contentType(MediaType.APPLICATION_JSON).content(body).with(user(officer)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.fieldErrors.reason").exists());
+	}
+
+	@Test
+	@DisplayName("관리자가 폐기하면 403이고 로트는 그대로다")
+	void givenAdmin_whenDiscard_thenReturns403() throws Exception {
+		StockLot lot = saveLot("B", 30, "2026-08-15");
+		User admin = userRepository.save(new User("admin_1", "관리자", "encoded", Role.ADMIN, null));
+
+		mockMvc.perform(disposalRequest(ship.getId(), lot.getId(), "파손", CustomUserDetails.from(admin)))
+				.andExpect(status().isForbidden());
+
+		assertThat(lot.getStatus()).isEqualTo(LotStatus.ACTIVE);
+	}
+
+	@Test
+	@DisplayName("소속 선박 경로로 다른 선박의 로트를 폐기하면 404 LOT_NOT_FOUND, 다른 선박 경로로 요청하면 403")
+	void givenOtherShipLot_whenDiscard_thenReturns404And403() throws Exception {
+		Ship otherShip = shipRepository.save(new Ship("다른 선박"));
+		StockLot otherLot = stockLotRepository.saveAndFlush(new StockLot("B", 30, LocalDate.parse("2026-08-15"),
+				Instant.parse(RECEIVED_AT), officerUser, otherShip, medication));
+
+		mockMvc.perform(disposalRequest(ship.getId(), otherLot.getId(), "파손", officer))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.error").value("LOT_NOT_FOUND"));
+		mockMvc.perform(disposalRequest(otherShip.getId(), otherLot.getId(), "파손", officer))
+				.andExpect(status().isForbidden());
+
+		assertThat(otherLot.getStatus()).isEqualTo(LotStatus.ACTIVE);
+	}
+
+	@Test
+	@DisplayName("잔량이 0인 로트도 폐기할 수 있다")
+	void givenEmptyLot_whenDiscard_thenReturns200() throws Exception {
+		StockLot lot = saveLot("B", 30, "2026-08-15");
+		lot.subtractQuantity(30);
+
+		mockMvc.perform(disposalRequest(ship.getId(), lot.getId(), "파손", officer))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("DISCARDED"));
+	}
+
+	private void saveListLots() {
+		Medication morphine = medicationRepository.save(new Medication("모르핀", null, "앰플"));
+
+		saveLot("W", "2026-07-21", "2026-03-01T09:00:00Z", medication);
+		StockLot x = saveLot("X", "2026-08-01", "2026-03-01T09:00:00Z", medication);
+		saveLot("Y", "2026-08-01", "2026-05-01T09:00:00Z", medication);
+		saveLot("Z", "2027-01-31", "2026-03-01T09:00:00Z", morphine);
+
+		x.discard(officerUser, "파손", Instant.parse("2026-07-01T00:00:00Z"));
+		// MyBatis는 JPA를 거치지 않으므로 조회 전에 DB에 반영한다.
+		stockLotRepository.saveAndFlush(x);
+	}
+
+	private StockLot saveLot(String lotNumber, String expiryDate, String receivedAt, Medication medication) {
+		return stockLotRepository.saveAndFlush(new StockLot(lotNumber, 10, LocalDate.parse(expiryDate),
+				Instant.parse(receivedAt), officerUser, ship, medication));
+	}
+
+	private StockLot saveLot(String lotNumber, int quantity, String expiryDate) {
+		return stockLotRepository.saveAndFlush(new StockLot(lotNumber, quantity, LocalDate.parse(expiryDate),
+				Instant.parse(RECEIVED_AT), officerUser, ship, medication));
+	}
+
+	private MockHttpServletRequestBuilder disposalRequest(Long shipId, Long lotId, String reason, CustomUserDetails user) {
+		String body = """
+				{"reason":"%s"}
+				""".formatted(reason);
+
+		return post("/api/ships/" + shipId + "/lots/" + lotId + "/disposal")
+				.contentType(MediaType.APPLICATION_JSON).content(body).with(user(user));
 	}
 
 	private String body(String lotNumber, int quantity, String expiryDate, String receivedAt) {

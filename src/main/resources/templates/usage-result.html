@@ -33,7 +33,7 @@
 
     <section th:if="${usage == null or usage.status.name() == 'ACTIVE'}">
         <h2>잘못 기록했다면 취소</h2>
-        <p>이 화면을 떠나면 화면에서 취소할 수 없습니다.</p>
+        <p>이 화면을 떠나도 사용 이력에서 취소할 수 있습니다.</p>
         <form th:action="@{/usages/{id}/cancellation(id=${id})}" method="post">
             <p>
                 <label for="reason">취소 사유</label>

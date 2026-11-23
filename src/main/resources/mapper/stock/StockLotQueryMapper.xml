@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shipmed.shipmed.domain.stock.repository.StockLotQueryMapper">
+
+    <sql id="lotFilter">
+        WHERE l.ship_id = #{shipId}
+        <if test="query.medicationId != null">
+           AND l.medication_id = #{query.medicationId}
+        </if>
+        <if test="query.status != null">
+            AND l.status = #{query.status}
+        </if>
+    </sql>
+
+    <select id="selectLots" resultType="com.shipmed.shipmed.domain.stock.dto.response.StockLotListDto">
+        SELECT
+            l.id                                    AS lot_id,
+            l.medication_id                         AS medication_id,
+            m.name                                  AS medication_name,
+            m.unit                                  AS unit,
+            l.lot_number                            AS lot_number,
+            l.initial_quantity                      AS initial_quantity,
+            l.remaining_quantity                    AS remaining_quantity,
+            l.expiry_date                           AS expiry_date,
+            l.expiry_date <![CDATA[ < ]]> #{today}  AS expired,
+            l.status                                AS status,
+            l.received_at                           AS received_at,
+            ru.name                                 AS received_by,
+            l.discarded_at                          AS discarded_at,
+            du.name                                 AS discarded_by,
+            l.discarded_reason                      AS discarded_reason
+        FROM tb_stock_lot l
+        JOIN tb_medication m  ON m.id = l.medication_id
+        JOIN tb_user ru ON ru.id = l.received_by
+        LEFT JOIN tb_user du ON du.id = l.discarded_by
+        <include refid="lotFilter"/>
+        ORDER BY l.expiry_date, l.received_at, l.id
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countLots" resultType="long">
+        SELECT count(*)
+        FROM tb_stock_lot l
+        <include refid="lotFilter"/>
+    </select>
+
+</mapper>

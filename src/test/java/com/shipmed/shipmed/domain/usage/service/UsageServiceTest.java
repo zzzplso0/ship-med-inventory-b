@@ -4,6 +4,7 @@ import com.shipmed.shipmed.domain.medication.entity.Medication;
 import com.shipmed.shipmed.domain.medication.exception.MedicationNotFoundException;
 import com.shipmed.shipmed.domain.medication.repository.MedicationRepository;
 import com.shipmed.shipmed.domain.ship.entity.Ship;
+import com.shipmed.shipmed.domain.ship.exception.ShipNotFoundException;
 import com.shipmed.shipmed.domain.ship.repository.ShipRepository;
 import com.shipmed.shipmed.domain.stock.entity.LotStatus;
 import com.shipmed.shipmed.domain.stock.entity.StockLot;
@@ -11,8 +12,10 @@ import com.shipmed.shipmed.domain.stock.repository.StockLotRepository;
 import com.shipmed.shipmed.domain.usage.dto.UsageMapperImpl;
 import com.shipmed.shipmed.domain.usage.dto.request.UsageCancelRequest;
 import com.shipmed.shipmed.domain.usage.dto.request.UsageCreateRequest;
+import com.shipmed.shipmed.domain.usage.dto.request.UsageHistoryQuery;
 import com.shipmed.shipmed.domain.usage.dto.response.AllocationDto;
 import com.shipmed.shipmed.domain.usage.dto.response.UsageCancelDto;
+import com.shipmed.shipmed.domain.usage.dto.response.UsageHistoryDto;
 import com.shipmed.shipmed.domain.usage.dto.response.UsageResult;
 import com.shipmed.shipmed.domain.usage.entity.RecordStatus;
 import com.shipmed.shipmed.domain.usage.entity.UsageLotAllocation;
@@ -20,6 +23,7 @@ import com.shipmed.shipmed.domain.usage.entity.UsageRecord;
 import com.shipmed.shipmed.domain.usage.exception.UsageIdempotencyKeyReusedException;
 import com.shipmed.shipmed.domain.usage.exception.UsageInsufficientStockException;
 import com.shipmed.shipmed.domain.usage.exception.UsageNotFoundException;
+import com.shipmed.shipmed.domain.usage.repository.UsageHistoryQueryMapper;
 import com.shipmed.shipmed.domain.usage.repository.UsageLotAllocationRepository;
 import com.shipmed.shipmed.domain.usage.repository.UsageRecordRepository;
 import com.shipmed.shipmed.domain.user.entity.Role;
@@ -27,6 +31,8 @@ import com.shipmed.shipmed.domain.user.entity.User;
 import com.shipmed.shipmed.domain.user.repository.UserRepository;
 import com.shipmed.shipmed.global.exception.BusinessException;
 import com.shipmed.shipmed.global.exception.ErrorCode;
+import com.shipmed.shipmed.global.request.PageQuery;
+import com.shipmed.shipmed.global.response.PageResponse;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -50,6 +56,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class UsageServiceTest {
@@ -80,6 +87,9 @@ class UsageServiceTest {
 	@Mock
 	private UserRepository userRepository;
 
+	@Mock
+	private UsageHistoryQueryMapper usageHistoryQueryMapper;
+
 	private UsageService usageService;
 	private Ship ship;
 	private Medication medication;
@@ -92,7 +102,7 @@ class UsageServiceTest {
 				shipRepository, userRepository, FIXED_CLOCK, usageMapper);
 		usageService = new UsageServiceImpl(
 				usageProcessor, usageRecordRepository, usageLotAllocationRepository, userRepository,
-				stockLotRepository, FIXED_CLOCK, usageMapper);
+				stockLotRepository, shipRepository, FIXED_CLOCK, usageMapper, usageHistoryQueryMapper);
 
 		ship = new Ship("선박");
 		ReflectionTestUtils.setField(ship, "id", SHIP_ID);
@@ -357,6 +367,39 @@ class UsageServiceTest {
 			ReflectionTestUtils.setField(lot, "id", id);
 			lot.subtractQuantity(initialQuantity - remainingQuantity);
 			return lot;
+		}
+	}
+
+	@Nested
+	@DisplayName("사용 이력")
+	class GetHistory {
+
+		private final UsageHistoryQuery query = new UsageHistoryQuery(null, null, null, null);
+		private final PageQuery pageQuery = new PageQuery(null, null);
+
+		@Test
+		@DisplayName("선박이 없으면 SHIP_NOT_FOUND이고 이력을 조회하지 않는다")
+		void givenNoShip_whenGetHistory_thenThrowsShipNotFound() {
+			given(shipRepository.existsById(SHIP_ID)).willReturn(false);
+
+			assertThatThrownBy(() -> usageService.getHistory(SHIP_ID, query, pageQuery))
+					.isInstanceOf(ShipNotFoundException.class);
+			verifyNoInteractions(usageHistoryQueryMapper);
+		}
+
+		@Test
+		@DisplayName("조회된 기록이 없으면 분배내역을 조회하지 않고 빈 페이지를 돌려준다")
+		void givenNoRows_whenGetHistory_thenSkipsAllocationQuery() {
+			given(shipRepository.existsById(SHIP_ID)).willReturn(true);
+			given(usageHistoryQueryMapper.selectUsages(SHIP_ID, query, null, null, 0, PageQuery.DEFAULT_SIZE))
+					.willReturn(List.of());
+			given(usageHistoryQueryMapper.countUsages(SHIP_ID, query, null, null)).willReturn(0L);
+
+			PageResponse<UsageHistoryDto> result = usageService.getHistory(SHIP_ID, query, pageQuery);
+
+			assertThat(result.content()).isEmpty();
+			assertThat(result.totalElements()).isZero();
+			verify(usageHistoryQueryMapper, never()).selectAllocations(any());
 		}
 	}
 }
