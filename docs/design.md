@@ -661,6 +661,7 @@ ON uq_usage_idempotency 위반:
     - `GlobalExceptionHandler`의 적용 대상을 `@RestController`로 좁히지 않는다. 없는 경로의 `NoResourceFoundException`은 컨트롤러 밖에서 나므로, 좁히면 `/api`의 404 `RESOURCE_NOT_FOUND` 응답이 사라진다.
     - 같은 이유로 화면의 없는 경로(예: `/foo`)는 JSON 404로 응답한다. 화면의 메뉴와 redirect는 없는 경로로 보내지 않으므로 주소를 직접 입력할 때만 생긴다.
 - 형식 검증(400): `@Valid`와 `BindingResult`로 필드 옆에 메시지를 보여 주고 입력값을 유지한다.
+- 목록 조회 필터의 오류(잘못된 상태·날짜 값, 시작일이 종료일보다 늦음, `page`·`size` 범위)는 400 오류 화면으로 보여 준다. 필터는 GET 쿼리 파라미터라 입력 폼처럼 다시 그리지 않는다.
 - 규칙 검증(400)과 비즈니스 충돌(409): 컨트롤러가 `BusinessException`을 받아 같은 입력 화면에 `ErrorCode` 메시지를 보여 준다. 재고 부족은 가용 수량을 함께 보여 준다.
 - 403, 404, 500: 오류 화면. 500 화면에 예외 정보를 넣지 않는다.
 
@@ -674,3 +675,4 @@ ON uq_usage_idempotency 위반:
 - 사용 폼은 오류로 다시 그릴 때도 새 `Idempotency-Key`를 만든다. 오류면 기록이 생기지 않았으므로 안전하다.
 - 폐기에 성공하면 로트 목록으로 redirect하고 완료 메시지를 보여 준다. 사유 검증에 실패하면 로트 목록으로 redirect하고 해당 로트 옆에 메시지를 보여 준다(flash). 필터·페이지는 유지하지 않는다.
 - 이력 화면에서 취소에 성공하면 `selected`를 그 기록으로 둔 이력 화면으로 redirect하고 완료 메시지를 보여 준다. 사유 검증에 실패해도 같은 화면으로 redirect하고 메시지를 보여 준다(flash).
+- 이 redirect는 취소 전의 필터와 페이지(`from`, `to`, `medicationId`, `status`, `page`, `size`)를 유지한다. 상세는 현재 페이지의 조회 결과에서 꺼내므로, 조건이 바뀌면 취소한 기록이 결과에서 빠져 상세가 사라지기 때문. 취소 폼이 현재 조회 조건을 함께 보낸다.
