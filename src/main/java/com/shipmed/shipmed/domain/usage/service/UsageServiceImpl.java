@@ -1,29 +1,37 @@
 package com.shipmed.shipmed.domain.usage.service;
 
+import com.shipmed.shipmed.domain.ship.exception.ShipNotFoundException;
+import com.shipmed.shipmed.domain.ship.repository.ShipRepository;
 import com.shipmed.shipmed.domain.stock.repository.StockLotRepository;
 import com.shipmed.shipmed.domain.usage.dto.UsageMapper;
 import com.shipmed.shipmed.domain.usage.dto.request.UsageCancelRequest;
 import com.shipmed.shipmed.domain.usage.dto.request.UsageCreateRequest;
-import com.shipmed.shipmed.domain.usage.dto.response.UsageCancelDto;
-import com.shipmed.shipmed.domain.usage.dto.response.UsageResult;
+import com.shipmed.shipmed.domain.usage.dto.request.UsageHistoryQuery;
+import com.shipmed.shipmed.domain.usage.dto.response.*;
 import com.shipmed.shipmed.domain.usage.entity.RecordStatus;
 import com.shipmed.shipmed.domain.usage.entity.UsageLotAllocation;
 import com.shipmed.shipmed.domain.usage.entity.UsageRecord;
 import com.shipmed.shipmed.domain.usage.exception.UsageNotFoundException;
+import com.shipmed.shipmed.domain.usage.repository.UsageHistoryQueryMapper;
 import com.shipmed.shipmed.domain.usage.repository.UsageLotAllocationRepository;
 import com.shipmed.shipmed.domain.usage.repository.UsageRecordRepository;
 import com.shipmed.shipmed.domain.user.entity.User;
 import com.shipmed.shipmed.domain.user.repository.UserRepository;
 import com.shipmed.shipmed.global.exception.BusinessException;
 import com.shipmed.shipmed.global.exception.ErrorCode;
+import com.shipmed.shipmed.global.request.PageQuery;
+import com.shipmed.shipmed.global.response.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 
 @RequiredArgsConstructor
@@ -37,9 +45,11 @@ public class UsageServiceImpl implements UsageService {
     private final UsageLotAllocationRepository usageLotAllocationRepository;
     private final UserRepository userRepository;
     private final StockLotRepository stockLotRepository;
+    private final ShipRepository shipRepository;
 
     private final Clock clock;
     private final UsageMapper usageMapper;
+    private final UsageHistoryQueryMapper usageHistoryQueryMapper;
 
     @Override
     public UsageResult create(Long shipId, Long userId, String idempotencyKey, UsageCreateRequest usageCreateRequest) {
@@ -107,5 +117,57 @@ public class UsageServiceImpl implements UsageService {
         usageRecord.cancel(user, usageCancelRequest.reason(), Instant.now(clock));
 
         return usageMapper.toCancelDto(usageRecord, allocations);
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public PageResponse<UsageHistoryDto> getHistory(Long shipId, UsageHistoryQuery query, PageQuery pageQuery) {
+        boolean exists = shipRepository.existsById(shipId);
+
+        if (!exists) {
+            throw new ShipNotFoundException();
+        }
+
+        Instant fromAt = query.from() == null ? null : query.from().atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant toBefore = query.to() == null ? null : query.to().plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+
+        int offset = pageQuery.page() * pageQuery.size();
+
+        List<UsageHistoryRow> rows = usageHistoryQueryMapper.selectUsages(shipId, query, fromAt, toBefore, offset, pageQuery.size());
+        long total = usageHistoryQueryMapper.countUsages(shipId, query, fromAt, toBefore);
+
+        if (rows.isEmpty()) {
+            return PageResponse.from(new PageImpl<>(List.of(), pageQuery.toPageable(), total));
+        }
+
+        List<Long> usageIds = rows.stream()
+                .map(UsageHistoryRow::usageId)
+                .toList();
+
+        List<UsageHistoryAllocationRow> allocationRows = usageHistoryQueryMapper.selectAllocations(usageIds);
+
+        return PageResponse.from(new PageImpl<>(createResult(rows, allocationRows), pageQuery.toPageable(), total));
+    }
+
+    private List<UsageHistoryDto> createResult(List<UsageHistoryRow> rows, List<UsageHistoryAllocationRow> allocationRows) {
+        List<UsageHistoryDto> result = new ArrayList<>(rows.size());
+
+        for (UsageHistoryRow row : rows) {
+            List<UsageHistoryAllocationDto> allocations = new ArrayList<>();
+
+            for (UsageHistoryAllocationRow allocation : allocationRows) {
+                if (row.usageId().equals(allocation.usageId())) {
+                    allocations.add(new UsageHistoryAllocationDto(
+                            allocation.lotId(), allocation.lotNumber(), allocation.quantity()));
+                }
+            }
+
+            result.add(new UsageHistoryDto(
+                    row.usageId(), row.medicationId(), row.medicationName(), row.unit(), row.quantity(),
+                    row.status(), row.usedAt(), row.userId(), row.userName(),
+                    row.cancelledAt(), row.cancelledBy(), row.cancelReason(), allocations));
+        }
+
+        return result;
     }
 }
