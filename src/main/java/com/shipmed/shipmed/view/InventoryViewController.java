@@ -25,7 +25,9 @@ public class InventoryViewController {
         model.addAttribute("shipId", shipId);
         model.addAttribute("items", items);
         model.addAttribute("shortageCount", items.stream().filter(item -> Boolean.TRUE.equals(item.shortage())).count());
-        model.addAttribute("expiringCount", items.stream().filter(item -> !item.expiringSoon().isEmpty()).count());
+        // 임박·폐기 대상은 로트 단위라 약품 수가 아니라 로트 수로 센다.
+        model.addAttribute("expiringCount", items.stream().mapToInt(item -> item.expiringSoon().size()).sum());
+        model.addAttribute("expiredCount", items.stream().mapToInt(item -> item.expired().size()).sum());
 
         return "inventory";
     }
