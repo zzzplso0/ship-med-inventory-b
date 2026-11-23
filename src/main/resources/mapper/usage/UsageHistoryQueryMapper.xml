@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shipmed.shipmed.domain.usage.repository.UsageHistoryQueryMapper">
+
+    <sql id="usageFilter">
+        WHERE r.ship_id = #{shipId}
+        <if test="fromAt != null"> AND r.used_at >= #{fromAt} </if>
+        <if test="toBefore != null"> AND r.used_at <![CDATA[ < ]]> #{toBefore} </if>
+        <if test="query.medicationId != null"> AND r.medication_id = #{query.medicationId} </if>
+        <if test="query.status != null"> AND r.status = #{query.status} </if>
+    </sql>
+
+    <select id="selectUsages" resultType="com.shipmed.shipmed.domain.usage.dto.response.UsageHistoryRow">
+        SELECT
+            r.id                AS usage_id,
+            m.id                AS medication_id,
+            m.name              AS medication_name,
+            m.unit              AS unit,
+            r.total_quantity    AS quantity,
+            r.status            AS status,
+            r.used_at           AS used_at,
+            u.id                AS user_id,
+            u.name              AS user_name,
+            r.cancelled_at      AS cancelled_at,
+            cu.name             AS cancelled_by,
+            r.cancel_reason     AS cancel_reason
+        FROM tb_usage_record r
+        JOIN tb_medication m ON m.id = r.medication_id
+        JOIN tb_user u ON u.id = r.user_id
+        LEFT JOIN tb_user cu ON cu.id = r.cancelled_by
+        <include refid="usageFilter" />
+        ORDER BY r.used_at DESC, r.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countUsages" resultType="long">
+        SELECT count(*)
+        FROM tb_usage_record r
+        <include refid="usageFilter" />
+    </select>
+
+    <select id="selectAllocations" resultType="com.shipmed.shipmed.domain.usage.dto.response.UsageHistoryAllocationRow">
+        SELECT
+            a.usage_id              AS usage_id,
+            a.lot_id                AS lot_id,
+            l.lot_number            AS lot_number,
+            a.allocated_quantity    AS quantity
+        FROM tb_usage_lot_allocation a
+        JOIN tb_stock_lot l ON l.id = a.lot_id
+        WHERE a.usage_id IN <foreach collection="usageIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+        ORDER BY a.usage_id, a.id
+    </select>
+
+</mapper>

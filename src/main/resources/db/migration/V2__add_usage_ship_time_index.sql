@@ -1,0 +1,1 @@
+CREATE INDEX idx_usage_ship_time ON tb_usage_record (ship_id, used_at);

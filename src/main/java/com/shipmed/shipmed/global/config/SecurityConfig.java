@@ -46,6 +46,7 @@ public class SecurityConfig {
                     // 의무사관 화면.
                     .requestMatchers("/ships/*/lots").hasRole("MEDICAL_OFFICER")
                     .requestMatchers(HttpMethod.POST, "/ships/*/lots/*/disposal").hasRole("MEDICAL_OFFICER")
+                    .requestMatchers(HttpMethod.GET, "/ships/*/usages/history").authenticated()
                     .requestMatchers("/ships/*/usages/**").hasRole("MEDICAL_OFFICER")
                     .requestMatchers(HttpMethod.POST, "/usages/*/cancellation").hasRole("MEDICAL_OFFICER")
 
