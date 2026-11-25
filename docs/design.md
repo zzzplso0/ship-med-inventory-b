@@ -32,11 +32,13 @@ CREATE TABLE tb_user (
     name          VARCHAR(30)  NOT NULL,
     password      VARCHAR(255) NOT NULL,
     role          VARCHAR(20)  NOT NULL,
+    email         VARCHAR(100) NOT NULL,  -- V3에서 NULL 허용으로 추가, V5에서 NOT NULL(decisions 부차 28번)
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     
     ship_id       BIGINT REFERENCES tb_ship(id),
     
     CONSTRAINT uq_user_login UNIQUE (login_id),
+    CONSTRAINT uq_user_email UNIQUE (email),  -- V3
     
     CONSTRAINT chk_user_role CHECK (role IN ('ADMIN','MEDICAL_OFFICER')),
     CONSTRAINT chk_user_ship CHECK (
@@ -133,8 +135,17 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 
 - 첫 관리자: 모든 환경에서 서버 시작 시 `CommandLineRunner`가 만듦.
     - `ADMIN` 역할의 계정이 이미 있으면 만들지 않음. 설정값을 바꿔도 기존 관리자에는 반영되지 않음.
-    - 계정 정보는 `shipmed.initial-admin`(`login-id`, `name`, `password`)으로 프로파일별 설정. prod는 환경변수 `ADMIN_LOGIN_ID`, `ADMIN_NAME`, `ADMIN_PASSWORD`로만 받고, 값이 없으면 서버가 시작되지 않음. local, test는 각 프로파일 yaml의 전용 값을 씀.
+    - 계정 정보는 `shipmed.initial-admin`(`login-id`, `name`, `password`, `email`)으로 프로파일별 설정. prod는 환경변수 `ADMIN_LOGIN_ID`, `ADMIN_NAME`, `ADMIN_PASSWORD`, `ADMIN_EMAIL`로만 받고, 값이 없으면 서버가 시작되지 않음. local, test는 각 프로파일 yaml의 전용 값을 씀.
+    - 이미 있는 관리자에는 이메일도 반영되지 않으므로, 이메일 도입 전에 만든 관리자는 계정 화면에서 채움.
 - 로컬 프로파일 전용: 선박 100척, 테스트용 의무사관 계정. 스키마 마이그레이션과 경로를 분리해 prod에는 적용되지 않게 함.
+    - seed 계정의 이메일은 `R__seed_users.sql`에서 `ON CONFLICT ... DO UPDATE`로 채움. repeatable 마이그레이션은 버전 마이그레이션(V3) 뒤에 실행되므로 컬럼이 있는 상태에서 돎.
+
+### 5. 스키마 변경 이력
+
+- V2: `idx_usage_ship_time`.
+- V3: `tb_user.email`(NULL 허용) + `uq_user_email`. 기존 계정은 빈 값으로 남음.
+- V4: Spring Batch 메타데이터 테이블(`BATCH_*`). `spring-batch-core`의 `schema-postgresql.sql`을 그대로 옮김. 앱 기동 시 자동 생성(`spring.batch.jdbc.initialize-schema`)은 끔.
+- V5: `tb_user.email SET NOT NULL`. 모든 계정에 이메일을 채운 뒤 별도 배포로 적용(확장 후 축소, decisions 부차 28번). 빈 값이 남아 있으면 마이그레이션이 실패해 서버가 시작되지 않음.
 
 ---
 
@@ -179,6 +190,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 | POST   | `/api/auth/logout`                                | 로그아웃               | 로그인                      | 200 / 401                                    |
 | POST   | `/api/users`                                      | 계정 등록              | 관리자                      | 201 / 400 / 404 / 409 로그인 ID 중복         |
 | GET    | `/api/users`                                      | 계정 목록              | 관리자                      | 200                                          |
+| PATCH  | `/api/users/{userId}/email`                       | 계정 이메일 수정       | 관리자                      | 200 / 400 / 404 / 409 이메일 중복            |
 | POST   | `/api/ships`                                      | 선박 등록              | 관리자                      | 201                                          |
 | GET    | `/api/ships`                                      | 선박 목록              | 로그인                      | 200                                          |
 | POST   | `/api/medications`                                | 약품 등록              | 관리자                      | 201                                          |
@@ -285,16 +297,19 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 
 ```markdown
 요청:
-	{ loginId, name, password, role, shipId }
+	{ loginId, name, password, role, shipId, email }
 201:
-	{ id, loginId, name, role, shipId }
+	{ id, loginId, name, role, shipId, email }
 400:
-	필수값 누락 // 길이 초과 // 비밀번호 규칙 위반 // 의무사관인데 shipId 없음, 관리자인데 shipId 있음
+	필수값 누락 // 길이 초과 // 비밀번호 규칙 위반 // 이메일 형식 위반 // 의무사관인데 shipId 없음, 관리자인데 shipId 있음
 404:
 	ship 없음
 409:
 	{ error:DUPLICATE_LOGIN_ID } // 같은 loginId가 이미 있음 (uq_user_login)
+	{ error:DUPLICATE_EMAIL }    // 같은 email이 이미 있음 (uq_user_email)
 ```
+
+- 이메일은 `@NotBlank`, `@Email`, `@Size(max=100)`로 검증하고, 서비스에서 앞뒤 공백을 지우고 소문자로 바꿔 저장한다. 중복 확인도 바꾼 값으로 한다.
 
 - 비밀번호 규칙은 계정 등록에만 적용한다. 첫 관리자 설정값과 로그인 요청에는 적용하지 않는다.
 - `role`과 `shipId` 조합 위반의 `fieldErrors` 키는 `shipMatchingRole`이다. 잘못된 `role` 값은 JSON 변환 실패라 `fieldErrors` 없이 `INVALID_INPUT`으로 응답한다.
@@ -303,7 +318,22 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 - GET `/api/users` — 계정 목록 (관리자)
 
 ```markdown
-200: 페이지 응답(3.1), content:[ { id, loginId, name, role, shipId }, ... ]
+200: 페이지 응답(3.1), content:[ { id, loginId, name, role, shipId, email }, ... ]  // email은 이메일 도입 전 계정이면 null
+```
+
+- PATCH `/api/users/{userId}/email` — 계정 이메일 수정 (관리자)
+
+```markdown
+요청:
+	{ email }
+200:
+	{ id, loginId, name, role, shipId, email }  // 지금과 같은 이메일이어도 200
+400:
+	이메일 누락 // 형식 위반 // 길이 초과
+404:
+	{ error:USER_NOT_FOUND }
+409:
+	{ error:DUPLICATE_EMAIL } // 다른 계정이 쓰는 이메일
 ```
 
 - POST `/api/ships` — 선박 등록 (관리자)
@@ -589,6 +619,37 @@ ON uq_usage_idempotency 위반:
 커밋 → 200 반환
 ```
 
+### 4. 만료·임박 알림 배치
+
+- 동작 기준은 `requirements.md` 3장. Spring Batch의 Job 하나(`expiryNotificationJob`), tasklet Step 하나.
+- 스케줄러가 매일 00:05 UTC(`@Scheduled(cron = "0 5 0 * * *", zone = "UTC")`)에 `JobOperator`로 실행하고, Job 파라미터로 오늘 날짜(`Clock`, UTC)를 넘긴다.
+    - 같은 날짜로 다시 실행하면 이미 완료된 JobInstance라 실행되지 않아, 하루 한 통이 보장된다. 실패한 실행은 같은 날짜로 다시 실행할 수 있다.
+    - test 프로파일은 스케줄러를 끈다(`shipmed.notification.scheduler-enabled: false`). 테스트는 Job을 직접 실행한다.
+
+```markdown
+함수 알림Tasklet(today):
+    대상 = SELECT 선박별 로트
+              WHERE status='ACTIVE' AND remaining_quantity > 0
+                AND (expiry_date < today                              # 폐기 대상
+                     OR expiry_date IN (today + 30일, today + 7일))   # 임박 D-30·D-7
+           ORDER BY ship_id, FEFO
+    의무사관 = SELECT role='MEDICAL_OFFICER' AND ship_id IN (대상의 선박)
+
+    FOR 의무사관 IN 의무사관:
+        IF email 없음: WARN 로그; 건너뜀          # 이메일 도입 전 계정. V5 이후 이 분기 삭제
+        메일 = 선박, 폐기 대상 목록, 임박 목록(D-30·D-7 표시)
+        TRY 발송 CATCH: ERROR 로그; 다음 의무사관  # 한 명 실패가 나머지를 막지 않음
+    보낸 수·건너뛴 수·실패 수를 로그로 남김
+```
+
+- 조회는 MyBatis 쿼리 하나로 한다(로트 + 약품 이름). 대상 로트가 없는 선박의 의무사관은 조회하지 않는다.
+- 발송 실패가 있어도 Step은 성공으로 끝낸다. 실패로 끝내면 같은 날 재실행 때 이미 받은 사람에게 다시 보내기 때문. 실패는 로그로 확인한다.
+- 메일은 `JavaMailSender`로 보내는 텍스트 메일. 제목 `[shipmed] 선박 {이름} 폐기 대상 N건, 임박 M건`.
+- 발송 설정
+    - prod: Gmail SMTP(`smtp.gmail.com:587`, STARTTLS). 계정과 앱 비밀번호는 환경변수 `MAIL_USERNAME`, `MAIL_PASSWORD`로만 받는다. 보내는 주소는 `MAIL_USERNAME`.
+    - local: SMTP 설정이 없으면 메일 내용을 로그로 남기는 발송기를 쓴다.
+    - test: `JavaMailSender`를 mock으로 바꿔 보낸 내용을 검증한다.
+
 ---
 
 ## 5. 동시성, 정합성 전략
@@ -598,6 +659,7 @@ ON uq_usage_idempotency 위반:
 - 로트 폐기는 로트 한 행만 잠그므로 차감·복원의 `id` 오름차순 잠금과 데드락이 생기지 않는다. 사용 차감이 폐기 중인 로트의 잠금을 기다렸다면, 잠금을 얻은 뒤 PostgreSQL이 `status='ACTIVE'` 조건을 다시 평가해 그 로트를 차감 대상에서 뺀다(READ COMMITTED).
 - 같은 키 동시 요청은 로트 잠금 뒤 기존 기록을 다시 확인한다(4.1의 1-1단계). 그래도 UNIQUE 위반이 나면 롤백 후 새 트랜잭션에서 기존 기록을 조회해 반환한다(4.1의 6단계).
 - 계정 등록은 먼저 `loginId` 중복을 확인해 409로 응답한다. 동시 요청이 확인을 함께 통과하면 늦은 쪽의 `uq_user_login` 위반을 같은 409로 변환한다.
+    - 이메일도 같은 방식이다. 등록·이메일 수정은 먼저 중복을 확인하고, 겹친 요청의 `uq_user_email` 위반을 409 `DUPLICATE_EMAIL`로 변환한다.
     - `saveAndFlush`로 위반을 바로 일으키고, 제약 이름이 `uq_user_login`일 때만 변환한다. 다른 제약 위반은 그대로 던진다.
     - 위반 후 추가 쿼리 없이 예외를 던져 롤백하므로 새 트랜잭션은 필요 없다.
 - 비치 기준은 기존 행이 있으면 수정하고, 없으면 `saveAndFlush`로 저장한다. 신규 요청이 겹쳐 `uq_requirement` 위반이 나면 409 `REQUIREMENT_CONFLICT`로 변환하고 롤백한다. 다른 제약 위반은 그대로 던진다.
@@ -619,6 +681,7 @@ ON uq_usage_idempotency 위반:
 | POST     | `/logout`                                       | 로그아웃                             | 로그인                                  |
 | GET      | `/`                                             | 역할별 첫 화면으로 redirect          | 로그인                                  |
 | GET/POST | `/users`                                        | 계정 목록·등록                       | 관리자                                  |
+| POST     | `/users/{userId}/email`                         | 계정 이메일 수정                     | 관리자                                  |
 | GET/POST | `/ships`                                        | 선박 목록·등록                       | 목록 로그인, 등록 관리자                |
 | GET/POST | `/medications`                                  | 약품 목록·등록                       | 목록 로그인, 등록 관리자                |
 | GET/POST | `/ships/{shipId}/requirements`                  | 비치 기준 목록·설정                  | 목록 관리자·의무사관(소속), 설정 관리자 |
@@ -676,6 +739,7 @@ ON uq_usage_idempotency 위반:
 - 취소에 성공하면 복원 내역을 flash attribute로 넘기고 사용 화면으로 redirect한다. 취소 사유 검증에 실패하면 결과 데이터 없이 취소 폼만 다시 보여 준다.
 - 입고 폼의 유효기한은 `date`, 입고 시각은 `datetime-local` 입력(분 단위)으로 받고 입고 시각은 UTC로 본다. 기본값은 주입한 `Clock`의 현재 시각.
 - 사용 폼은 오류로 다시 그릴 때도 새 `Idempotency-Key`를 만든다. 오류면 기록이 생기지 않았으므로 안전하다.
+- 계정 이메일 수정은 계정 목록의 각 행에 폼을 두고, 성공·실패 모두 계정 목록으로 redirect해 메시지를 보여 준다(flash). 폐기 폼과 같은 방식.
 - 폐기에 성공하면 로트 목록으로 redirect하고 완료 메시지를 보여 준다. 사유 검증에 실패하면 로트 목록으로 redirect하고 해당 로트 옆에 메시지를 보여 준다(flash). 필터·페이지는 유지하지 않는다.
 - 이력 화면에서 취소에 성공하면 `selected`를 그 기록으로 둔 이력 화면으로 redirect하고 완료 메시지를 보여 준다. 사유 검증에 실패해도 같은 화면으로 redirect하고 메시지를 보여 준다(flash).
 - 이 redirect는 취소 전의 필터와 페이지(`from`, `to`, `medicationId`, `status`, `page`, `size`)를 유지한다. 상세는 현재 페이지의 조회 결과에서 꺼내므로, 조건이 바뀌면 취소한 기록이 결과에서 빠져 상세가 사라지기 때문. 취소 폼이 현재 조회 조건을 함께 보낸다.
