@@ -16,6 +16,11 @@
             <span class="error" th:if="${fieldErrors?.get('loginId')}" th:text="${fieldErrors.get('loginId')}"></span>
         </p>
         <p>
+            <label for="email">이메일</label>
+            <input type="email" id="email" name="email" th:value="${form?.email}" maxlength="100" required>
+            <span class="error" th:if="${fieldErrors?.get('email')}" th:text="${fieldErrors.get('email')}"></span>
+        </p>
+        <p>
             <label for="name">이름</label>
             <input type="text" id="name" name="name" th:value="${form?.name}" maxlength="30" required>
             <span class="error" th:if="${fieldErrors?.get('name')}" th:text="${fieldErrors.get('name')}"></span>
@@ -53,6 +58,7 @@
             <th>이름</th>
             <th>역할</th>
             <th>소속 선박 ID</th>
+            <th>이메일</th>
         </tr>
         </thead>
         <tbody>
@@ -62,9 +68,17 @@
             <td th:text="${user.name}"></td>
             <td th:text="${user.role.name() == 'ADMIN'} ? '관리자' : '의무사관'"></td>
             <td th:text="${user.shipId} ?: '-'"></td>
+            <td>
+                <form th:action="@{/users/{userId}/email(userId=${user.id})}" method="post">
+                    <input type="email" name="email" th:value="${user.email}" maxlength="100" required
+                           placeholder="이메일 없음" aria-label="이메일">
+                    <button type="submit">수정</button>
+                    <span class="error" th:if="${emailErrorUserId == user.id}" th:text="${emailError}"></span>
+                </form>
+            </td>
         </tr>
         <tr th:if="${users.content.isEmpty()}">
-            <td colspan="5">계정이 없습니다.</td>
+            <td colspan="6">계정이 없습니다.</td>
         </tr>
         </tbody>
     </table>
