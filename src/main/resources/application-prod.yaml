@@ -22,5 +22,6 @@ logging:
 shipmed:
   initial-admin:
     login-id: ${ADMIN_LOGIN_ID}
+    email: ${ADMIN_EMAIL}
     name: ${ADMIN_NAME}
     password: ${ADMIN_PASSWORD}

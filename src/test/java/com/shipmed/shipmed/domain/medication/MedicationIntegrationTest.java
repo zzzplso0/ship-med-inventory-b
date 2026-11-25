@@ -150,7 +150,7 @@ class MedicationIntegrationTest {
 	}
 
 	private CustomUserDetails principal(Long userId, Role role, Ship ship) {
-		User user = new User("login-" + userId, "이름", "encoded", role, ship);
+		User user = new User("login-" + userId, null, "이름", "encoded", role, ship);
 		ReflectionTestUtils.setField(user, "id", userId);
 		return CustomUserDetails.from(user);
 	}

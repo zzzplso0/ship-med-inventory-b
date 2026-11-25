@@ -19,6 +19,8 @@ public enum ErrorCode {
 
     // user
     DUPLICATE_LOGIN_ID(HttpStatus.CONFLICT, "이미 사용 중인 로그인 ID입니다."),
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
+    DUPLICATE_EMAIL(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
 
     // stock_requirement
     REQUIREMENT_CONFLICT(HttpStatus.CONFLICT, "같은 요청이 이미 존재합니다. 다시 시도해 주세요."),

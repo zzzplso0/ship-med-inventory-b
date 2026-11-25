@@ -91,9 +91,9 @@ class UsageHistoryIntegrationTest {
 		ship2 = shipRepository.save(new Ship("선박2"));
 		aspirin = medicationRepository.save(new Medication("아스피린", null, "정"));
 		Medication morphine = medicationRepository.save(new Medication("모르핀", null, "앰플"));
-		User officer1User = userRepository.save(new User("officer_1", "의무사관1", "encoded", Role.MEDICAL_OFFICER, ship1));
-		User officer2User = userRepository.save(new User("officer_2", "의무사관2", "encoded", Role.MEDICAL_OFFICER, ship2));
-		User adminUser = userRepository.save(new User("admin_1", "관리자", "encoded", Role.ADMIN, null));
+		User officer1User = userRepository.save(new User("officer_1", null, "의무사관1", "encoded", Role.MEDICAL_OFFICER, ship1));
+		User officer2User = userRepository.save(new User("officer_2", null, "의무사관2", "encoded", Role.MEDICAL_OFFICER, ship2));
+		User adminUser = userRepository.save(new User("admin_1", null, "관리자", "encoded", Role.ADMIN, null));
 		officer1 = CustomUserDetails.from(officer1User);
 		admin = CustomUserDetails.from(adminUser);
 

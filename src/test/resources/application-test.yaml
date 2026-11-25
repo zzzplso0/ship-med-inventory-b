@@ -10,5 +10,6 @@ logging:
 shipmed:
   initial-admin:
     login-id: test
+    email: test@example.com
     name: test
     password: test

@@ -21,5 +21,6 @@ logging:
 shipmed:
   initial-admin:
     login-id: local-admin
+    email: local-admin@example.com
     name: 로컬 관리자
     password: admin1234!

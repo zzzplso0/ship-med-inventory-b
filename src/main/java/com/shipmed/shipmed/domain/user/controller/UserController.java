@@ -1,6 +1,7 @@
 package com.shipmed.shipmed.domain.user.controller;
 
 import com.shipmed.shipmed.domain.user.dto.request.UserCreateRequest;
+import com.shipmed.shipmed.domain.user.dto.request.UserEmailUpdateRequest;
 import com.shipmed.shipmed.domain.user.dto.response.UserDto;
 import com.shipmed.shipmed.domain.user.service.UserService;
 import com.shipmed.shipmed.global.request.PageQuery;
@@ -28,5 +29,14 @@ public class UserController {
     @GetMapping
     public ResponseEntity<PageResponse<UserDto>> getAllUsers(@Valid @ModelAttribute PageQuery pageQuery) {
         return ResponseEntity.ok(userService.getAllUsers(pageQuery));
+    }
+
+    @PatchMapping("/{userId}/email")
+    public ResponseEntity<UserDto> updateUserEmail(@PathVariable Long userId,
+                                                   @Valid @RequestBody UserEmailUpdateRequest emailUpdateRequest)
+    {
+        UserDto update = userService.updateEmail(userId, emailUpdateRequest);
+
+        return ResponseEntity.ok(update);
     }
 }
