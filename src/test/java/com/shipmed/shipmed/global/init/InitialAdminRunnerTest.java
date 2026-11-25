@@ -31,7 +31,7 @@ class InitialAdminRunnerTest {
 
 	@BeforeEach
 	void setUp() {
-		runner = new InitialAdminRunner(userRepository, passwordEncoder, "admin", "관리자", "plain");
+		runner = new InitialAdminRunner(userRepository, passwordEncoder, "admin", "test@example.com", "관리자", "plain");
 	}
 
 	@Test

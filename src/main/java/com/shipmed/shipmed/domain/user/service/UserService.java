@@ -1,6 +1,7 @@
 package com.shipmed.shipmed.domain.user.service;
 
 import com.shipmed.shipmed.domain.user.dto.request.UserCreateRequest;
+import com.shipmed.shipmed.domain.user.dto.request.UserEmailUpdateRequest;
 import com.shipmed.shipmed.domain.user.dto.response.UserDto;
 import com.shipmed.shipmed.global.request.PageQuery;
 import com.shipmed.shipmed.global.response.PageResponse;
@@ -8,5 +9,6 @@ import com.shipmed.shipmed.global.response.PageResponse;
 public interface UserService {
 
     UserDto create(UserCreateRequest userCreateRequest);
+    UserDto updateEmail(Long userId, UserEmailUpdateRequest userEmailUpdateRequest);
     PageResponse<UserDto> getAllUsers(PageQuery pageQuery);
 }

@@ -17,16 +17,19 @@ public class InitialAdminRunner implements CommandLineRunner {
     private final PasswordEncoder passwordEncoder;
 
     private final String loginId;
+    private final String email;
     private final String name;
     private final String password;
 
     public InitialAdminRunner(UserRepository userRepository, PasswordEncoder passwordEncoder,
                               @Value("${shipmed.initial-admin.login-id}") String loginId,
+                              @Value("${shipmed.initial-admin.email}") String email,
                               @Value("${shipmed.initial-admin.name}") String name,
                               @Value("${shipmed.initial-admin.password}") String password) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.loginId = loginId;
+        this.email = email;
         this.name = name;
         this.password = password;
     }
@@ -39,7 +42,7 @@ public class InitialAdminRunner implements CommandLineRunner {
         }
 
         userRepository.save(new User(
-                loginId, name, passwordEncoder.encode(password), Role.ADMIN, null
+                loginId, email, name, passwordEncoder.encode(password), Role.ADMIN, null
         ));
 
         log.info("첫 관리자 계정을 생성했습니다.");

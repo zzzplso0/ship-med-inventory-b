@@ -1,0 +1,1 @@
+ALTER TABLE tb_user ADD COLUMN email VARCHAR(100), ADD CONSTRAINT uq_user_email UNIQUE (email);

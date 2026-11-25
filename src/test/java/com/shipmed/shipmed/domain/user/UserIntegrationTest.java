@@ -36,6 +36,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,6 +49,7 @@ class UserIntegrationTest {
 
 	private static final String LOGIN_ID = "officer_1";
 	private static final String PASSWORD = "Abc123!@";
+	private static final String EMAIL = "officer1@example.com";
 
 	@Autowired
 	private WebApplicationContext context;
@@ -63,6 +65,7 @@ class UserIntegrationTest {
 
 	private MockMvc mockMvc;
 	private CustomUserDetails admin;
+	private CustomUserDetails officer;
 	private Ship ship;
 
 	@BeforeEach
@@ -71,9 +74,13 @@ class UserIntegrationTest {
 
 		ship = shipRepository.save(new Ship("선박"));
 
-		User adminUser = new User("login-10", "이름", "encoded", Role.ADMIN, null);
+		User adminUser = new User("login-10", null, "이름", "encoded", Role.ADMIN, null);
 		ReflectionTestUtils.setField(adminUser, "id", 10L);
 		admin = CustomUserDetails.from(adminUser);
+
+		User officerUser = new User("login-11", null, "이름", "encoded", Role.MEDICAL_OFFICER, ship);
+		ReflectionTestUtils.setField(officerUser, "id", 11L);
+		officer = CustomUserDetails.from(officerUser);
 	}
 
 	// 등록
@@ -135,7 +142,9 @@ class UserIntegrationTest {
 				body("a".repeat(31), "ADMIN", PASSWORD, null),
 				body(LOGIN_ID, "MEDICAL_OFFICER", PASSWORD, null),
 				body("admin_1", "ADMIN", PASSWORD, 1L),
-				body(LOGIN_ID, "CAPTAIN", PASSWORD, null)
+				body(LOGIN_ID, "CAPTAIN", PASSWORD, null),
+				"{\"loginId\":\"admin_1\",\"name\":\"이름\",\"role\":\"ADMIN\",\"password\":\"Abc123!@\"}",
+				body("admin_1", "not-an-email", "ADMIN", PASSWORD, null)
 		);
 	}
 
@@ -180,6 +189,71 @@ class UserIntegrationTest {
 				.andExpect(status().isNotFound());
 	}
 
+	// 이메일
+	@Test
+	@DisplayName("대소문자만 다른 이메일로 등록하면 409 DUPLICATE_EMAIL")
+	void givenExistingEmailInOtherCase_whenCreate_thenReturns409() throws Exception {
+		saveOfficer();
+
+		mockMvc.perform(createRequest(body("officer_9", "Officer1@Example.com", "MEDICAL_OFFICER", PASSWORD, ship.getId())))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.error").value("DUPLICATE_EMAIL"));
+	}
+
+	@Test
+	@DisplayName("관리자가 이메일을 수정하면 200이고 앞뒤 공백을 지운 소문자로 저장된다")
+	void givenAdmin_whenUpdateEmail_thenReturns200AndSavesNormalizedEmail() throws Exception {
+		User officer2 = saveOfficer2();
+
+		mockMvc.perform(updateEmailRequest(officer2.getId(), " New@Example.com ").with(user(admin)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.email").value("new@example.com"));
+
+		assertThat(userRepository.findById(officer2.getId()).orElseThrow().getEmail()).isEqualTo("new@example.com");
+	}
+
+	@Test
+	@DisplayName("다른 계정의 이메일로 수정하면 409이고 바뀌지 않는다")
+	void givenOtherUsersEmail_whenUpdateEmail_thenReturns409() throws Exception {
+		saveOfficer();
+		User officer2 = saveOfficer2();
+
+		mockMvc.perform(updateEmailRequest(officer2.getId(), EMAIL).with(user(admin)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.error").value("DUPLICATE_EMAIL"));
+
+		assertThat(userRepository.findById(officer2.getId()).orElseThrow().getEmail()).isNull();
+	}
+
+	@Test
+	@DisplayName("중복 확인을 통과한 뒤 uq_user_email을 위반해도 409")
+	void givenEmailViolationAfterCheck_whenUpdateEmail_thenReturns409() throws Exception {
+		saveOfficer();
+		User officer2 = saveOfficer2();
+		doReturn(false).when(userRepository).existsByEmail(EMAIL);
+
+		mockMvc.perform(updateEmailRequest(officer2.getId(), EMAIL).with(user(admin)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.error").value("DUPLICATE_EMAIL"));
+	}
+
+	@Test
+	@DisplayName("없는 계정의 이메일을 수정하면 404")
+	void givenMissingUser_whenUpdateEmail_thenReturns404() throws Exception {
+		mockMvc.perform(updateEmailRequest(Long.MAX_VALUE, "new@example.com").with(user(admin)))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.error").value("USER_NOT_FOUND"));
+	}
+
+	@Test
+	@DisplayName("의무사관이 이메일을 수정하면 403")
+	void givenOfficer_whenUpdateEmail_thenReturns403() throws Exception {
+		User officer2 = saveOfficer2();
+
+		mockMvc.perform(updateEmailRequest(officer2.getId(), "new@example.com").with(user(officer)))
+				.andExpect(status().isForbidden());
+	}
+
 	// 목록
 	@Test
 	@DisplayName("계정 목록을 페이지 응답으로 조회하고 비밀번호는 응답하지 않는다")
@@ -194,7 +268,18 @@ class UserIntegrationTest {
 	}
 
 	private void saveOfficer() {
-		userRepository.saveAndFlush(new User(LOGIN_ID, "의무사관", "encoded", Role.MEDICAL_OFFICER, ship));
+		userRepository.saveAndFlush(new User(LOGIN_ID, EMAIL, "의무사관", "encoded", Role.MEDICAL_OFFICER, ship));
+	}
+
+	// 이메일 도입 전 계정.
+	private User saveOfficer2() {
+		return userRepository.saveAndFlush(new User("officer_2", null, "의무사관2", "encoded", Role.MEDICAL_OFFICER, ship));
+	}
+
+	private MockHttpServletRequestBuilder updateEmailRequest(Long userId, String email) {
+		return patch("/api/users/{userId}/email", userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"%s\"}".formatted(email));
 	}
 
 	private MockHttpServletRequestBuilder createRequest(String body) {
@@ -202,7 +287,11 @@ class UserIntegrationTest {
 	}
 
 	private static String body(String loginId, String role, String password, Long shipId) {
-		return "{\"loginId\":\"%s\",\"name\":\"이름\",\"role\":\"%s\",\"password\":\"%s\",\"shipId\":%s}"
-				.formatted(loginId, role, password, shipId);
+		return body(loginId, "new@example.com", role, password, shipId);
+	}
+
+	private static String body(String loginId, String email, String role, String password, Long shipId) {
+		return "{\"loginId\":\"%s\",\"email\":\"%s\",\"name\":\"이름\",\"role\":\"%s\",\"password\":\"%s\",\"shipId\":%s}"
+				.formatted(loginId, email, role, password, shipId);
 	}
 }

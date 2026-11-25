@@ -350,7 +350,7 @@ class UsageServiceTest {
 		}
 
 		private User officer(Long id) {
-			User user = new User("officer_" + id, "의무사관1", "encoded", Role.MEDICAL_OFFICER, ship);
+			User user = new User("officer_" + id, null, "의무사관1", "encoded", Role.MEDICAL_OFFICER, ship);
 			ReflectionTestUtils.setField(user, "id", id);
 			return user;
 		}

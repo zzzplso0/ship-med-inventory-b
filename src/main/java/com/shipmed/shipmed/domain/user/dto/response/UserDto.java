@@ -7,6 +7,7 @@ public record UserDto(
         String loginId,
         String name,
         Role role,
-        Long shipId
+        Long shipId,
+        String email
 ) {
 }

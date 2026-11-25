@@ -39,6 +39,7 @@ public class SecurityConfig {
 
                     // 관리자 화면.
                     .requestMatchers("/users").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/users/*/email").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ships").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.POST, "/medications").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ships/*/requirements").hasRole("ADMIN")
@@ -60,6 +61,7 @@ public class SecurityConfig {
                     // 관리자.
                     .requestMatchers(HttpMethod.POST, "/api/users").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.GET, "/api/users").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.PATCH, "/api/users/*/email").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/ships").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/medications").hasRole("ADMIN")
                     .requestMatchers(HttpMethod.PUT, "/api/ships/*/requirements/*").hasRole("ADMIN")

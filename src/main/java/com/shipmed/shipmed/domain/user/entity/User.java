@@ -16,6 +16,9 @@ public class User extends BaseEntity {
     @Column(name = "login_id", length = 30, nullable = false)
     private String loginId;
 
+    @Column(name = "email", length = 100, unique = true)
+    private String email;
+
     @Column(name = "name", length = 30, nullable = false)
     private String name;
 
@@ -30,11 +33,16 @@ public class User extends BaseEntity {
     @JoinColumn(name = "ship_id")
     private Ship ship;
 
-    public User(String loginId, String name, String encodedPassword, Role role, Ship ship) {
+    public User(String loginId, String email, String name, String encodedPassword, Role role, Ship ship) {
         this.loginId = loginId;
+        this.email = email;
         this.name = name;
         this.password = encodedPassword;
         this.role = role;
         this.ship = ship;
+    }
+
+    public void changeEmail(String newEmail) {
+        this.email = newEmail;
     }
 }
