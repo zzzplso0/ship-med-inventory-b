@@ -47,7 +47,6 @@ public class ExpiryNotificationTasklet implements Tasklet {
     @Override
     public @Nullable RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
         int sent = 0;
-        int skipped = 0;
         int failed = 0;
 
         List<ExpiryNotificationLotRow> rows = queryMapper.selectNotificationLots(
@@ -64,12 +63,6 @@ public class ExpiryNotificationTasklet implements Tasklet {
         List<User> officers = userRepository.findByRoleAndShipIdIn(Role.MEDICAL_OFFICER, lotsByShip.keySet());
 
         for (User officer: officers) {
-            if (officer.getEmail() == null) {
-                log.warn("이메일이 없어 알림을 건너뜁니다. loginId={}", officer.getLoginId());
-                skipped++;
-                continue;
-            }
-
             List<ExpiryNotificationLotRow> lots = lotsByShip.get(officer.getShip().getId());
 
             SimpleMailMessage message = createMessage(officer.getEmail(), lots, today);
@@ -83,7 +76,7 @@ public class ExpiryNotificationTasklet implements Tasklet {
             }
         }
 
-        log.info("만료·임박 알림 메일: 보냄={}, 건너뜀={}, 실패={}", sent, skipped, failed);
+        log.info("만료·임박 알림 메일: 보냄={}, 실패={}", sent, failed);
 
         return RepeatStatus.FINISHED;
     }

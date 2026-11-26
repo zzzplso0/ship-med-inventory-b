@@ -78,7 +78,7 @@ class StockLotIntegrationTest {
 		ship = shipRepository.save(new Ship("선박"));
 		medication = medicationRepository.save(new Medication("아스피린", null, "정"));
 		// received_by FK가 있으므로 실제로 저장한 계정을 쓴다.
-		officerUser = userRepository.save(new User("officer_1", null, "의무사관", "encoded", Role.MEDICAL_OFFICER, ship));
+		officerUser = userRepository.save(new User("officer_1", "officer_1@example.com", "의무사관", "encoded", Role.MEDICAL_OFFICER, ship));
 		officer = CustomUserDetails.from(officerUser);
 	}
 
@@ -209,7 +209,7 @@ class StockLotIntegrationTest {
 	@Test
 	@DisplayName("관리자는 선박의 로트 목록을 보고, 의무사관이 다른 선박을 조회하면 403")
 	void givenAdminAndOtherShip_whenGetLots_thenReturns200And403() throws Exception {
-		User admin = userRepository.save(new User("admin_1", null, "관리자", "encoded", Role.ADMIN, null));
+		User admin = userRepository.save(new User("admin_1", "admin_1@example.com", "관리자", "encoded", Role.ADMIN, null));
 		Ship otherShip = shipRepository.save(new Ship("다른 선박"));
 
 		mockMvc.perform(get("/api/ships/" + ship.getId() + "/lots").with(user(CustomUserDetails.from(admin))))
@@ -284,7 +284,7 @@ class StockLotIntegrationTest {
 	@DisplayName("관리자가 폐기하면 403이고 로트는 그대로다")
 	void givenAdmin_whenDiscard_thenReturns403() throws Exception {
 		StockLot lot = saveLot("B", 30, "2026-08-15");
-		User admin = userRepository.save(new User("admin_1", null, "관리자", "encoded", Role.ADMIN, null));
+		User admin = userRepository.save(new User("admin_1", "admin_1@example.com", "관리자", "encoded", Role.ADMIN, null));
 
 		mockMvc.perform(disposalRequest(ship.getId(), lot.getId(), "파손", CustomUserDetails.from(admin)))
 				.andExpect(status().isForbidden());

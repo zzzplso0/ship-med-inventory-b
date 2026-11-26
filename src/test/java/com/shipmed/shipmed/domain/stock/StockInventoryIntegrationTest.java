@@ -78,7 +78,7 @@ class StockInventoryIntegrationTest {
 		ship = shipRepository.save(new Ship("선박"));
 		morphine = medicationRepository.save(new Medication("모르핀", null, "앰플"));
 		aspirin = medicationRepository.save(new Medication("아스피린", null, "정"));
-		officer = userRepository.save(new User("inventory_officer", null, "의무사관", "encoded", Role.MEDICAL_OFFICER, ship));
+		officer = userRepository.save(new User("inventory_officer", "inventory_officer@example.com", "의무사관", "encoded", Role.MEDICAL_OFFICER, ship));
 	}
 
 	@Test
@@ -159,7 +159,7 @@ class StockInventoryIntegrationTest {
 	}
 
 	private CustomUserDetails admin() {
-		User admin = new User("inventory_admin", null, "관리자", "encoded", Role.ADMIN, null);
+		User admin = new User("inventory_admin", "inventory_admin@example.com", "관리자", "encoded", Role.ADMIN, null);
 		ReflectionTestUtils.setField(admin, "id", 10L);
 		return CustomUserDetails.from(admin);
 	}
