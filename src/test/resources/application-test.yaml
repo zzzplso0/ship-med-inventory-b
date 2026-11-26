@@ -2,6 +2,8 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  mail:
+    host: localhost
 
 logging:
   level:
@@ -10,5 +12,9 @@ logging:
 shipmed:
   initial-admin:
     login-id: test
+    email: test@example.com
     name: test
     password: test
+  notification:
+    scheduler-enabled: false
+    from: noreply@example.com

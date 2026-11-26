@@ -13,6 +13,20 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+          starttls:
+            enable: true
 
 logging:
   level:
@@ -22,5 +36,8 @@ logging:
 shipmed:
   initial-admin:
     login-id: ${ADMIN_LOGIN_ID}
+    email: ${ADMIN_EMAIL}
     name: ${ADMIN_NAME}
     password: ${ADMIN_PASSWORD}
+  notification:
+    from: ${MAIL_USERNAME}

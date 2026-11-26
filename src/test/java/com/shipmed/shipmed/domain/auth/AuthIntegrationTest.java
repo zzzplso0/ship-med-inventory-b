@@ -71,7 +71,7 @@ class AuthIntegrationTest {
 
 		ship = shipRepository.save(new Ship("선박"));
 		officer = userRepository.save(
-				new User(LOGIN_ID, "의무사관", passwordEncoder.encode(PASSWORD), Role.MEDICAL_OFFICER, ship));
+				new User(LOGIN_ID, null, "의무사관", passwordEncoder.encode(PASSWORD), Role.MEDICAL_OFFICER, ship));
 	}
 
 	// 로그인
@@ -145,7 +145,7 @@ class AuthIntegrationTest {
 	void givenOfficerCreatedByApi_whenLogin_thenRoleAndShipAccessApply() throws Exception {
 		Ship otherShip = shipRepository.save(new Ship("다른 선박"));
 		MockHttpSession adminSession = loginSession(adminLoginId, adminPassword);
-		String body = "{\"loginId\":\"officer_2\",\"name\":\"이름\",\"role\":\"MEDICAL_OFFICER\",\"password\":\"%s\",\"shipId\":%d}"
+		String body = "{\"loginId\":\"officer_2\",\"email\":\"officer2@example.com\",\"name\":\"이름\",\"role\":\"MEDICAL_OFFICER\",\"password\":\"%s\",\"shipId\":%d}"
 				.formatted(PASSWORD, ship.getId());
 		mockMvc.perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content(body).session(adminSession))
 				.andExpect(status().isCreated());

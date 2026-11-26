@@ -5,9 +5,12 @@ import com.shipmed.shipmed.domain.ship.exception.ShipNotFoundException;
 import com.shipmed.shipmed.domain.ship.repository.ShipRepository;
 import com.shipmed.shipmed.domain.user.dto.UserMapper;
 import com.shipmed.shipmed.domain.user.dto.request.UserCreateRequest;
+import com.shipmed.shipmed.domain.user.dto.request.UserEmailUpdateRequest;
 import com.shipmed.shipmed.domain.user.dto.response.UserDto;
 import com.shipmed.shipmed.domain.user.entity.User;
 import com.shipmed.shipmed.domain.user.exception.UserDuplicateException;
+import com.shipmed.shipmed.domain.user.exception.UserEmailDuplicateException;
+import com.shipmed.shipmed.domain.user.exception.UserNotFoundException;
 import com.shipmed.shipmed.domain.user.repository.UserRepository;
 import com.shipmed.shipmed.global.request.PageQuery;
 import com.shipmed.shipmed.global.response.PageResponse;
@@ -25,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserServiceImpl implements UserService {
 
     private static final String UQ_USER_LOGIN = "uq_user_login";
+    private static final String UQ_USER_EMAIL = "uq_user_email";
 
     private final UserRepository userRepository;
     private final ShipRepository shipRepository;
@@ -41,13 +45,19 @@ public class UserServiceImpl implements UserService {
         }
 
         boolean existsUser = userRepository.existsByLoginId(userCreateRequest.loginId());
-
         if (existsUser) {
             throw new UserDuplicateException();
         }
 
+        String email = userCreateRequest.email().strip().toLowerCase();
+        boolean existsEmail = userRepository.existsByEmail(email);
+        if (existsEmail) {
+            throw new UserEmailDuplicateException();
+        }
+
         User user = new User(
                 userCreateRequest.loginId(),
+                email,
                 userCreateRequest.name(),
                 passwordEncoder.encode(userCreateRequest.password()),
                 userCreateRequest.role(),
@@ -62,6 +72,45 @@ public class UserServiceImpl implements UserService {
                     && UQ_USER_LOGIN.equals(cause.getConstraintName())) {
                 throw new UserDuplicateException();
             }
+
+            if (ex.getCause() instanceof ConstraintViolationException cause
+                    && UQ_USER_EMAIL.equals(cause.getConstraintName())) {
+                throw new UserEmailDuplicateException();
+            }
+            throw ex;
+        }
+
+        return userMapper.toDto(user);
+    }
+
+    @Transactional
+    @Override
+    public UserDto updateEmail(Long userId, UserEmailUpdateRequest userEmailUpdateRequest) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(UserNotFoundException::new);
+
+        String email = userEmailUpdateRequest.email().strip().toLowerCase();
+
+        if (email.equals(user.getEmail())) {
+            return userMapper.toDto(user);
+        }
+
+        boolean existsEmail = userRepository.existsByEmail(email);
+
+        if (existsEmail) {
+            throw new UserEmailDuplicateException();
+        }
+
+        user.changeEmail(email);
+
+        try {
+            userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException ex) {
+            if (ex.getCause() instanceof ConstraintViolationException cause
+                    && UQ_USER_EMAIL.equals(cause.getConstraintName())) {
+                throw new UserEmailDuplicateException();
+            }
+
             throw ex;
         }
 

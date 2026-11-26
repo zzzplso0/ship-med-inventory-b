@@ -23,6 +23,11 @@ spring:
   flyway:
     locations:
       - classpath:db/migration
+  batch:
+    jdbc:
+      initialize-schema: never
+    job:
+      enabled: false
 
 mybatis:
   mapper-locations:
@@ -42,3 +47,6 @@ management:
       probes:
         enabled: true
       show-details: never
+  health:
+    mail:
+      enabled: false
