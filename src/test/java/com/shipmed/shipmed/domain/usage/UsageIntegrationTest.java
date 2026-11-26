@@ -99,8 +99,8 @@ class UsageIntegrationTest {
 
 		ship = shipRepository.save(new Ship("선박"));
 		medication = medicationRepository.save(new Medication("아스피린", null, "정"));
-		officer1 = userRepository.save(new User("usage_officer_1", null, "의무사관1", "encoded", Role.MEDICAL_OFFICER, ship));
-		officer2 = userRepository.save(new User("usage_officer_2", null, "의무사관2", "encoded", Role.MEDICAL_OFFICER, ship));
+		officer1 = userRepository.save(new User("usage_officer_1", "usage_officer_1@example.com", "의무사관1", "encoded", Role.MEDICAL_OFFICER, ship));
+		officer2 = userRepository.save(new User("usage_officer_2", "usage_officer_2@example.com", "의무사관2", "encoded", Role.MEDICAL_OFFICER, ship));
 	}
 
 	@AfterEach
@@ -326,7 +326,7 @@ class UsageIntegrationTest {
 	@Test
 	@DisplayName("관리자가 취소하면 403")
 	void givenAdmin_whenCancel_thenReturns403() throws Exception {
-		User admin = new User("usage_admin", null, "관리자", "encoded", Role.ADMIN, null);
+		User admin = new User("usage_admin", "usage_admin@example.com", "관리자", "encoded", Role.ADMIN, null);
 
 		mockMvc.perform(cancelRequest(Long.MAX_VALUE, REASON, admin))
 				.andExpect(status().isForbidden());

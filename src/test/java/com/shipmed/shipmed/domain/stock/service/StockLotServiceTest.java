@@ -95,7 +95,7 @@ class StockLotServiceTest {
 		@Test
 		@DisplayName("만료일이 오늘이고 입고 시각이 현재면 입고자를 넣어 저장한다")
 		void givenBoundaryDates_whenCreate_thenSavesWithReceiver() {
-			User user = new User("officer_1", null, "이름", "encoded", Role.MEDICAL_OFFICER, new Ship("선박"));
+			User user = new User("officer_1", "officer_1@example.com", "이름", "encoded", Role.MEDICAL_OFFICER, new Ship("선박"));
 			given(userRepository.getReferenceById(USER_ID)).willReturn(user);
 
 			create(TODAY, NOW);
@@ -176,7 +176,7 @@ class StockLotServiceTest {
 
 		@BeforeEach
 		void setUp() {
-			User receiver = new User("officer_1", null, "의무사관", "encoded", Role.MEDICAL_OFFICER, new Ship("선박"));
+			User receiver = new User("officer_1", "officer_1@example.com", "의무사관", "encoded", Role.MEDICAL_OFFICER, new Ship("선박"));
 			lot = new StockLot("L-001", 10, TODAY.plusDays(30), NOW, receiver, new Ship("선박"),
 					new Medication("약품", null, "정"));
 			ReflectionTestUtils.setField(lot, "id", LOT_ID);
@@ -185,7 +185,7 @@ class StockLotServiceTest {
 		@Test
 		@DisplayName("정상 로트면 상태를 DISCARDED로 바꾸고 폐기 시각·폐기자·사유를 기록하며 잔량은 그대로다")
 		void givenActiveLot_whenDiscard_thenRecordsDisposal() {
-			User discarder = new User("officer_2", null, "폐기자", "encoded", Role.MEDICAL_OFFICER, new Ship("선박"));
+			User discarder = new User("officer_2", "officer_2@example.com", "폐기자", "encoded", Role.MEDICAL_OFFICER, new Ship("선박"));
 			given(stockLotRepository.findByIdAndShipId(LOT_ID, SHIP_ID)).willReturn(Optional.of(lot));
 			given(userRepository.getReferenceById(USER_ID)).willReturn(discarder);
 
@@ -202,7 +202,7 @@ class StockLotServiceTest {
 		@Test
 		@DisplayName("이미 폐기된 로트면 처음 폐기 결과를 돌려주고 사유·폐기자를 바꾸지 않는다")
 		void givenDiscardedLot_whenDiscard_thenReturnsExistingDisposal() {
-			User firstDiscarder = new User("officer_2", null, "처음 폐기자", "encoded", Role.MEDICAL_OFFICER, new Ship("선박"));
+			User firstDiscarder = new User("officer_2", "officer_2@example.com", "처음 폐기자", "encoded", Role.MEDICAL_OFFICER, new Ship("선박"));
 			Instant firstDiscardedAt = NOW.minusSeconds(3600);
 			lot.discard(firstDiscarder, "파손", firstDiscardedAt);
 			given(stockLotRepository.findByIdAndShipId(LOT_ID, SHIP_ID)).willReturn(Optional.of(lot));

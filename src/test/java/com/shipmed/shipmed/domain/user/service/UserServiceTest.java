@@ -112,7 +112,7 @@ class UserServiceTest {
 		@Test
 		@DisplayName("다른 계정이 쓰는 이메일이면 UserEmailDuplicateException")
 		void givenExistingEmail_whenUpdateEmail_thenThrowsDuplicate() {
-			User user = new User("officer_2", null, "이름", "encoded", Role.MEDICAL_OFFICER, null);
+			User user = new User("officer_2", "officer_2@example.com", "이름", "encoded", Role.MEDICAL_OFFICER, null);
 			given(userRepository.findById(2L)).willReturn(Optional.of(user));
 			given(userRepository.existsByEmail("officer1@example.com")).willReturn(true);
 
@@ -137,13 +137,13 @@ class UserServiceTest {
 		@DisplayName("요청한 페이지를 id 오름차순으로 조회하고 페이지 응답으로 변환한다")
 		void givenPageQuery_whenGetAllUsers_thenQueriesSortedByIdAndReturnsPageResponse() {
 			Pageable pageable = PageRequest.of(1, 2, Sort.by("id"));
-			User user = new User("admin_1", null, "이름", "encoded", Role.ADMIN, null);
+			User user = new User("admin_1", "admin_1@example.com", "이름", "encoded", Role.ADMIN, null);
 			ReflectionTestUtils.setField(user, "id", 3L);
 			given(userRepository.findAll(pageable)).willReturn(new PageImpl<>(List.of(user), pageable, 3));
 
 			PageResponse<UserDto> result = userService.getAllUsers(new PageQuery(1, 2));
 
-			assertThat(result.content()).containsExactly(new UserDto(3L, "admin_1", "이름", Role.ADMIN, null, null));
+			assertThat(result.content()).containsExactly(new UserDto(3L, "admin_1", "이름", Role.ADMIN, null, "admin_1@example.com"));
 			assertThat(result.totalElements()).isEqualTo(3);
 		}
 	}
