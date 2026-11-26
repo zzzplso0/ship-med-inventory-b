@@ -647,7 +647,7 @@ ON uq_usage_idempotency 위반:
 - 메일은 `JavaMailSender`로 보내는 텍스트 메일. 제목 `[shipmed] 선박 {이름} 폐기 대상 N건, 임박 M건`.
 - 발송 설정
     - prod: Gmail SMTP(`smtp.gmail.com:587`, STARTTLS). 계정과 앱 비밀번호는 환경변수 `MAIL_USERNAME`, `MAIL_PASSWORD`로만 받는다. 보내는 주소는 `MAIL_USERNAME`.
-    - local: SMTP 설정이 없으면 메일 내용을 로그로 남기는 발송기를 쓴다.
+    - local: docker compose의 Mailpit(가짜 SMTP 서버, `localhost:1025`)으로 보낸다. 메일은 밖으로 나가지 않고 웹 화면(`http://localhost:8025`)에서 확인한다.
     - test: `JavaMailSender`를 mock으로 바꿔 보낸 내용을 검증한다.
 
 ---

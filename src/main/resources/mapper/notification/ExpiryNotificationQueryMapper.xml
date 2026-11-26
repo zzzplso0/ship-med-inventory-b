@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.shipmed.shipmed.domain.notification.repository.ExpiryNotificationQueryMapper">
+
+    <select id="selectNotificationLots" resultType="com.shipmed.shipmed.domain.notification.dto.response.ExpiryNotificationLotRow">
+        <![CDATA[
+            SELECT
+                s.id                    AS ship_id,
+                s.name                  AS ship_name,
+                m.name                  AS medication_name,
+                l.lot_number            AS lot_number,
+                l.remaining_quantity    AS remaining_quantity,
+                l.expiry_date           AS expiry_date
+            FROM tb_stock_lot l
+            JOIN tb_ship s ON s.id = l.ship_id
+            JOIN tb_medication m ON m.id = l.medication_id
+            WHERE
+                l.status = 'ACTIVE'
+                AND l.remaining_quantity > 0
+                AND (l.expiry_date < #{today} OR l.expiry_date IN (#{dMinus30}, #{dMinus7}))
+            ORDER BY l.ship_id, l.expiry_date, l.received_at, l.id
+        ]]>
+    </select>
+
+</mapper>

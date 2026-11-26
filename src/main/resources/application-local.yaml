@@ -11,6 +11,9 @@ spring:
     locations:
       - classpath:db/migration
       - classpath:db/seed
+  mail:
+    host: localhost
+    port: 1025
 
 logging:
   level:
@@ -24,3 +27,5 @@ shipmed:
     email: local-admin@example.com
     name: 로컬 관리자
     password: admin1234!
+  notification:
+    from: noreply@shipmed.local

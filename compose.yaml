@@ -38,6 +38,16 @@ services:
     networks:
       - shipmed-network
 
+  mailpit:
+    image: axllent/mailpit:1.2.4
+    container_name: shipmed-mail
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # 메일함
+    networks:
+      - shipmed-network
+
 volumes:
   shipmed-db-data:
     name: shipmed-db-data
