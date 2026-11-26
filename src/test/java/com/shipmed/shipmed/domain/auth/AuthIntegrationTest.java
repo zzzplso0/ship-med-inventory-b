@@ -71,7 +71,7 @@ class AuthIntegrationTest {
 
 		ship = shipRepository.save(new Ship("선박"));
 		officer = userRepository.save(
-				new User(LOGIN_ID, null, "의무사관", passwordEncoder.encode(PASSWORD), Role.MEDICAL_OFFICER, ship));
+				new User(LOGIN_ID, LOGIN_ID + "@example.com", "의무사관", passwordEncoder.encode(PASSWORD), Role.MEDICAL_OFFICER, ship));
 	}
 
 	// 로그인

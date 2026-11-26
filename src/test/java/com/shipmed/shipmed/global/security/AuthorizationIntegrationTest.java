@@ -121,7 +121,7 @@ class AuthorizationIntegrationTest {
 	}
 
 	private CustomUserDetails principal(Long userId, Role role, Ship ship) {
-		User user = new User("login-" + userId, null, "이름", "encoded", role, ship);
+		User user = new User("login-" + userId, "login-" + userId + "@example.com", "이름", "encoded", role, ship);
 		ReflectionTestUtils.setField(user, "id", userId);
 		return CustomUserDetails.from(user);
 	}

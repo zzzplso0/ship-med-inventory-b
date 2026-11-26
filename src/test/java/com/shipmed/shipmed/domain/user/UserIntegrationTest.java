@@ -74,11 +74,11 @@ class UserIntegrationTest {
 
 		ship = shipRepository.save(new Ship("선박"));
 
-		User adminUser = new User("login-10", null, "이름", "encoded", Role.ADMIN, null);
+		User adminUser = new User("login-10", "login-10@example.com", "이름", "encoded", Role.ADMIN, null);
 		ReflectionTestUtils.setField(adminUser, "id", 10L);
 		admin = CustomUserDetails.from(adminUser);
 
-		User officerUser = new User("login-11", null, "이름", "encoded", Role.MEDICAL_OFFICER, ship);
+		User officerUser = new User("login-11", "login-11@example.com", "이름", "encoded", Role.MEDICAL_OFFICER, ship);
 		ReflectionTestUtils.setField(officerUser, "id", 11L);
 		officer = CustomUserDetails.from(officerUser);
 	}
@@ -222,7 +222,7 @@ class UserIntegrationTest {
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.error").value("DUPLICATE_EMAIL"));
 
-		assertThat(userRepository.findById(officer2.getId()).orElseThrow().getEmail()).isNull();
+		assertThat(userRepository.findById(officer2.getId()).orElseThrow().getEmail()).isEqualTo("officer_2@example.com");
 	}
 
 	@Test
@@ -273,7 +273,7 @@ class UserIntegrationTest {
 
 	// 이메일 도입 전 계정.
 	private User saveOfficer2() {
-		return userRepository.saveAndFlush(new User("officer_2", null, "의무사관2", "encoded", Role.MEDICAL_OFFICER, ship));
+		return userRepository.saveAndFlush(new User("officer_2", "officer_2@example.com", "의무사관2", "encoded", Role.MEDICAL_OFFICER, ship));
 	}
 
 	private MockHttpServletRequestBuilder updateEmailRequest(Long userId, String email) {

@@ -1,0 +1,1 @@
+ALTER TABLE tb_user ALTER COLUMN email SET NOT NULL;

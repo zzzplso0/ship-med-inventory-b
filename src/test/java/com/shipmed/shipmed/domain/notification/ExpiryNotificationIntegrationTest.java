@@ -85,7 +85,6 @@ class ExpiryNotificationIntegrationTest {
 		medication = medicationRepository.save(new Medication("아스피린", null, "정"));
 
 		officer1 = saveOfficer("notification_officer_1", "officer1@example.com", ship1);
-		saveOfficer("notification_officer_2", null, ship1);
 		saveOfficer("notification_officer_3", "officer3@example.com", ship2);
 
 		lotT = saveLot("T", 10, "2026-07-01");
@@ -105,8 +104,8 @@ class ExpiryNotificationIntegrationTest {
 	}
 
 	@Test
-	@DisplayName("이메일이 있는 의무사관에게 폐기 대상과 D-30·D-7 로트를 담아 1통 보낸다")
-	void givenLots_whenRun_thenSendsOneMailToOfficerWithEmail() {
+	@DisplayName("의무사관에게 폐기 대상과 D-30·D-7 로트를 담아 1통 보낸다")
+	void givenLots_whenRun_thenSendsOneMailToOfficer() {
 		jobRunner.run(TODAY);
 
 		ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
