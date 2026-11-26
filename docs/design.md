@@ -318,7 +318,7 @@ CREATE INDEX idx_lot_fefo                        -- 차감 대상 조회 조건�
 - GET `/api/users` — 계정 목록 (관리자)
 
 ```markdown
-200: 페이지 응답(3.1), content:[ { id, loginId, name, role, shipId, email }, ... ]  // email은 이메일 도입 전 계정이면 null
+200: 페이지 응답(3.1), content:[ { id, loginId, name, role, shipId, email }, ... ]
 ```
 
 - PATCH `/api/users/{userId}/email` — 계정 이메일 수정 (관리자)
@@ -636,10 +636,9 @@ ON uq_usage_idempotency 위반:
     의무사관 = SELECT role='MEDICAL_OFFICER' AND ship_id IN (대상의 선박)
 
     FOR 의무사관 IN 의무사관:
-        IF email 없음: WARN 로그; 건너뜀          # 이메일 도입 전 계정. V5 이후 이 분기 삭제
         메일 = 선박, 폐기 대상 목록, 임박 목록(D-30·D-7 표시)
         TRY 발송 CATCH: ERROR 로그; 다음 의무사관  # 한 명 실패가 나머지를 막지 않음
-    보낸 수·건너뛴 수·실패 수를 로그로 남김
+    보낸 수·실패 수를 로그로 남김
 ```
 
 - 조회는 MyBatis 쿼리 하나로 한다(로트 + 약품 이름). 대상 로트가 없는 선박의 의무사관은 조회하지 않는다.
